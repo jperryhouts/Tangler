@@ -65,9 +65,7 @@ class Masks():
         return idx
 
     @tf.custom_gradient
-    def loss_function(self, y_true, layer_inputs):
-        y_pred = self.n_pins*layer_inputs
-
+    def loss_function(self, y_true, y_pred):
         a_true, b_true = (y_true[:,:-1], y_true[:,1:])
         a_pred, b_pred = (y_pred[:,:-1], y_pred[:,1:])
 
@@ -76,7 +74,7 @@ class Masks():
         true_mask = tf.math.bincount(true_idx, minlength=self.size, dtype=tf.int32, axis=-1)
         pred_mask = tf.math.bincount(pred_idx, minlength=self.size, dtype=tf.int32, axis=-1)
         err_mask = true_mask-pred_mask
-        err = tf.cast(tf.square(err_mask), dtype=tf.float32) * self.t_lengths
+        err = tf.cast(tf.square(err_mask), dtype=tf.float32) #* self.t_lengths
 
         loss = tf.reduce_sum(err, axis=-1)
         norm = 1.0 / tf.reduce_sum(0 * err + 1, axis=-1)
@@ -85,7 +83,7 @@ class Masks():
         pred_idx1 = self.t_path2mask_idx(a_pred, b_pred+1)
         pred_mask1 = tf.math.bincount(pred_idx1, minlength=self.size, dtype=tf.int32, axis=-1)
         err_mask1 = pred_mask1 - true_mask
-        err1 = tf.cast(tf.square(err_mask1), dtype=tf.float32) * self.t_lengths
+        err1 = tf.cast(tf.square(err_mask1), dtype=tf.float32) #* self.t_lengths
 
         derr = tf.gather((err1-err), pred_idx1, batch_dims=1)
         t_grad = tf.pad(derr, [[0,0], [1, 0]])

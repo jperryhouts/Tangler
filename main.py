@@ -24,15 +24,17 @@ if __name__ == "__main__":
     train_parser.add_argument('--path-length', '-N', type=int, default=6000)
     train_parser.add_argument('--num-pins', '-k', type=int, default=300)
     train_parser.add_argument('--batch', '-b', type=int, default=10)
+    train_parser.add_argument('--epochs', '-e', type=int, default=1)
     train_parser.add_argument('--output', '-o', help='Save model to path')
-    train_parser.add_argument('dataset', help='path to tfrecord dataset directory')
+
+    train_parser.add_argument('tfrecord', nargs='+', help='Path(s) to tfrecord data')
 
     predict_parser = subparsers.add_parser("predict")
     predict_parser.add_argument('--res', '-r', type=int, default=600)
     predict_parser.add_argument('--num-pins', '-k', type=int, default=300)
-    predict_parser.add_argument('--model', '-m', help='path to saved model', required=True)
-    predict_parser.add_argument('--output', '-o', help='Save prediction to file')
-    predict_parser.add_argument('fname', help='Image to convert into thread pattern')
+    predict_parser.add_argument('--model', '-m', help='Path to saved model', required=True)
+    predict_parser.add_argument('--output', '-o', help='Folder in which to save predictions')
+    predict_parser.add_argument('fname', nargs='+', help='Image(s) to convert into thread pattern')
 
     args = parser.parse_args()
 
@@ -48,8 +50,9 @@ if __name__ == "__main__":
 
     if args.mode == "train":
         from train import do_train
-        model = do_train(args.dataset, args.res, args.path_length, args.num_pins, args.batch)
+        model = do_train(args.tfrecord, args.res, args.path_length, args.num_pins, args.batch, args.epochs)
         if (args.output):
+            print(f">> Saving model to <{args.output}>")
             model.save(args.output)
 
     elif args.mode == "predict":

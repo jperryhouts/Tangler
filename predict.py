@@ -1,30 +1,38 @@
+import os, sys
 import numpy as np
 import matplotlib.pyplot as plt
 import tensorflow as tf
 
 from utils import Masks, load_img
 
-def do_predict(fname:str, model_path:str, save_to:str=None, res:int=600, n_pins:int=300) -> None:
+def do_predict(paths:str, model_path:str, save_to:str=None, res:int=600, n_pins:int=300) -> None:
     masks = Masks(n_pins)
-
     model = tf.keras.models.load_model(model_path, custom_objects={'loss_function': masks.loss_function})
 
-    pixels = load_img(fname, res).astype(np.float32)
-    pixels = pixels.flatten().reshape((1,res,res,1))
-    result = model.predict(pixels)[0]
-    if save_to:
-        np.savetxt(save_to, result)
+    images = []
+    for img_path in paths:
+        pixels = load_img(img_path, res).astype(np.float32)
+        images.append(pixels.reshape((res,res,1)))
 
-    for idx, count in enumerate((1*(result > 0.1)).astype(int)):
-        if count:
-        #for _ in range(count):
-            a, b = np.array(masks.idx2pair(idx))
-            ac = masks.pin2coord(a)
-            bc = masks.pin2coord(b)
-            x = [ac[0], bc[0]]
-            y = [ac[1], bc[1]]
-            #sys.stdout.write(f'{x}, {y} -- ')
-            plt.plot(x, y, 'k-', lw=0.1)
+    result = model.predict(np.array(images))
+    for i, pattern in enumerate(result):
+        pins = pattern.astype(int)%n_pins
+        print(pattern[:10], pins[:10])
+
+        coords = [masks.pin2coord(pin) for pin in pins]
+        x, y = np.array(coords).T
+        _, ax = plt.subplots(2, 2)
+        ax[0][0].hist(pins, bins=range(0,n_pins))
+        ax[0][0].set_xlim((0,n_pins))
+        ax[1][0].plot(x, y, 'k-', lw=0.03)
+        ax[1][0].set_aspect(1.0)
+
+        pins = np.loadtxt(paths[i][:-5]+'.tsv').astype(int)[:pattern.size]
+        coords = [masks.pin2coord(pin) for pin in pins]
+        x, y = np.array(coords).T
+        ax[0][1].hist(pins, bins=range(0,n_pins))
+        ax[0][1].set_xlim((0,n_pins))
+        ax[1][1].plot(x, y, 'k-', lw=0.03)
+        ax[1][1].set_aspect(1.0)
 
     plt.show()
-
