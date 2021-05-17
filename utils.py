@@ -3,7 +3,7 @@ from PIL import Image, ImageOps
 import tensorflow as tf
 
 def load_img(src: str, res: int) -> np.array:
-    img = Image.open(src) if type(src) is str else src
+    img = Image.open(src)
     img = ImageOps.grayscale(img)
 
     crop = None
@@ -17,6 +17,15 @@ def load_img(src: str, res: int) -> np.array:
 class Masks():
     def __init__(self, n_pins):
         self.n_pins = n_pins
+
+        self.pin_coords = []
+        for pin in range(n_pins):
+            theta = pin*2*np.pi/n_pins
+            x = np.sin(theta)/2+1
+            y = np.cos(theta)/2+1
+            self.pin_coords.append([x,y])
+        self.pin_coords = np.array(self.pin_coords)
+
         self.seg2idx = np.zeros((n_pins,n_pins), dtype=np.int)
         self.idx2seg = []
         self.lengths = []
@@ -33,15 +42,11 @@ class Masks():
         self.t_lengths = tf.convert_to_tensor(self.lengths, dtype=tf.float32)
 
     def get_length(self, a, b):
-        ac = self.pin2coord(a)
-        bc = self.pin2coord(b)
-        return np.sqrt((ac[0]-bc[0])**2 + (ac[1]-bc[1])**2)
+        dx = self.pin_coords[a] - self.pin_coords[b]
+        return np.sqrt((dx**2).sum())
 
     def pin2coord(self, pin):
-        theta = pin*2*np.pi/self.n_pins
-        x = np.sin(theta)/2+1
-        y = np.cos(theta)/2+1
-        return (x, y)
+        return self.pin_coords[pin]
 
     def idx2pair(self, idx):
         return self.idx2seg[idx]
@@ -50,56 +55,40 @@ class Masks():
         a, b = sorted([a,b])
         return self.seg2idx[a][b-a]
 
+    ## a,b(10,999) -> idx(10,999)
     def t_path2mask_idx(self, a, b):
-        a = tf.cast(a, dtype=tf.int32)
-        b = tf.cast(b, dtype=tf.int32)
-        a = tf.math.floormod(a, self.n_pins)
-        b = tf.math.floormod(b, self.n_pins)
-
-        tmp1 = tf.gather(self.t_seg2idx, a, axis=0)
-        tmp2 = tf.gather(tmp1, b, axis=1)
+        a = tf.math.floormod(tf.cast(a, dtype=tf.int32), self.n_pins)
+        b = tf.math.floormod(tf.cast(b, dtype=tf.int32), self.n_pins)
+        tmp1 = tf.gather(self.t_seg2idx, a, axis=0, batch_dims=1)
+        tmp2 = tf.gather(tmp1, b, axis=2, batch_dims=1)
         idx = tf.linalg.diag_part(tmp2)
         return idx
 
     @tf.custom_gradient
     def loss_function(self, y_true, layer_inputs):
-        sigmoid_activation = layer_inputs
+        y_pred = self.n_pins*layer_inputs
 
-        # with tf.GradientTape() as tape:
-        #     tape.watch(layer_inputs)
-        #     sigmoid_activation = tf.math.sigmoid(layer_inputs)
-        #     sigmoid_activation_gradient = tape.gradient(sigmoid_activation, layer_inputs)
+        a_true, b_true = (y_true[:,:-1], y_true[:,1:])
+        a_pred, b_pred = (y_pred[:,:-1], y_pred[:,1:])
 
-        y_pred = self.n_pins*sigmoid_activation
+        true_idx = self.t_path2mask_idx(a_true, b_true)
+        pred_idx = self.t_path2mask_idx(a_pred, b_pred)
+        true_mask = tf.math.bincount(true_idx, minlength=self.size, dtype=tf.int32, axis=-1)
+        pred_mask = tf.math.bincount(pred_idx, minlength=self.size, dtype=tf.int32, axis=-1)
+        err_mask = true_mask-pred_mask
+        err = tf.cast(tf.square(err_mask), dtype=tf.float32) * self.t_lengths
 
-        y_shape = (10, 1000)
+        loss = tf.reduce_sum(err, axis=-1)
+        norm = 1.0 / tf.reduce_sum(0 * err + 1, axis=-1)
+        loss = tf.transpose(norm * tf.transpose(loss))
 
-        loss = np.zeros(y_shape[0])
-        grad = np.zeros(y_shape)
+        pred_idx1 = self.t_path2mask_idx(a_pred, b_pred+1)
+        pred_mask1 = tf.math.bincount(pred_idx1, minlength=self.size, dtype=tf.int32, axis=-1)
+        err_mask1 = pred_mask1 - true_mask
+        err1 = tf.cast(tf.square(err_mask1), dtype=tf.float32) * self.t_lengths
 
-        for i in range(y_shape[0]):
-            a_true, b_true = (y_true[i][:-1], y_true[i][1:])
-            a_pred, b_pred = (y_pred[i][:-1], y_pred[i][1:])
-
-            true_idx = self.t_path2mask_idx(a_true, b_true)
-            pred_idx = self.t_path2mask_idx(a_pred, b_pred)
-            true_mask = tf.math.bincount(true_idx, minlength=self.size, dtype=tf.int32)
-            pred_mask = tf.math.bincount(pred_idx, minlength=self.size, dtype=tf.int32)
-            err_mask = true_mask-pred_mask
-            err = self.t_lengths * tf.cast(tf.square(err_mask), dtype=tf.float32)
-
-            loss[i] = tf.reduce_sum(err) / self.size
-
-            pred_idx1 = self.t_path2mask_idx(a_pred, b_pred+1)
-            pred_mask1 = tf.math.bincount(pred_idx1, minlength=self.size, dtype=tf.int32)
-            err_mask1 = pred_mask1 - true_mask
-            err1 = self.t_lengths * tf.cast(tf.square(err_mask1), dtype=tf.float32)
-
-            derr = tf.gather((err1-err), pred_idx1)
-            #grad[i] = sigmoid_activation_gradient[i] * tf.pad(derr, [[1, 0]])
-            grad[i] = tf.pad(derr, [[1, 0]])
-
-        t_grad = tf.convert_to_tensor(grad, dtype=tf.float32)
+        derr = tf.gather((err1-err), pred_idx1, batch_dims=1)
+        t_grad = tf.pad(derr, [[0,0], [1, 0]])
 
         def gradient(y):
             y1 = tf.cast(y, dtype=tf.float32)
