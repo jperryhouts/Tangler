@@ -14,6 +14,78 @@ def load_img(src: str, res: int) -> np.array:
     img = img.resize((res, res), box=crop)
     return np.array(img)
 
+@tf.function
+def lambda_activation(x):
+    return 600*(1.0 + tf.math.sin(x*3.1415972))
+
+class PolarToCartesianLayer(tf.keras.layers.Layer):
+    def __init__(self, **kwargs):
+        super(PolarToCartesianLayer, self).__init__(**kwargs)
+
+    def call(self, inputs):
+        return tf.concat([tf.math.sin(inputs), tf.math.cos(inputs)], axis=-1)
+
+class CartesianToPolar(tf.keras.layers.Layer):
+    def __init__(self, **kwargs):
+        super(CartesianToPolar, self).__init__(**kwargs)
+
+    def call(self, inputs):
+        shape = (-1, 2, inputs.shape[-1]//2)
+        tmp = tf.reshape(inputs, shape)
+        tmp = tf.add(tmp, 1e-3*tf.random.normal((2, shape[-1])))
+        x = tmp[:,0,:]
+        y = tmp[:,1,:]
+        theta = tf.atan2(y, x)
+        return theta
+
+class NormalizeCartesianRadius(tf.keras.layers.Layer):
+    def __init__(self, **kwargs):
+        super(NormalizeCartesianRadius, self).__init__(**kwargs)
+
+    def call(self, inputs):
+        shape = (-1, 2, inputs.shape[-1]//2)
+        tmp = tf.reshape(inputs, shape)
+        tmp = tf.add(tmp, 1e-3*tf.random.normal((2, shape[-1])))
+        x = tmp[:,0,:]
+        y = tmp[:,1,:]
+        theta = tf.atan2(y, x)
+        x1 = tf.math.sin(theta)
+        y1 = tf.math.cos(theta)
+        return tf.concat([x1, y1], axis=-1)
+
+
+class ScaleLayer(tf.keras.layers.Layer):
+    def __init__(self, scale=300.0, offset=0.0, normalize=True, **kwargs):
+        super(ScaleLayer, self).__init__(**kwargs)
+        self.scale = scale
+        self.offset = offset
+        self.normalize = normalize
+        self.stretch = tf.Variable(scale, dtype=tf.float32, trainable=False)
+        self.shift = tf.Variable(offset, dtype=tf.float32, trainable=False)
+
+    def get_config(self):
+        cfg = super().get_config()
+        cfg['scale'] = self.scale
+        cfg['offset'] = self.offset
+        cfg['normalize'] = self.normalize
+        return cfg
+
+    def call(self, inputs):
+        if self.normalize:
+            i_std = tf.math.reduce_std(inputs, axis=-1, keepdims=True)
+            i_mean = tf.math.reduce_mean(inputs, axis=-1, keepdims=True)
+            i_centered = tf.subtract(inputs, i_mean)
+            inputs = tf.divide(i_centered, i_std)
+        i_scaled = tf.multiply(inputs, self.stretch)
+        i_shifted = tf.add(i_scaled, self.shift)
+        return i_shifted
+
+def index_error(y_true, y_pred):
+    x0, y0 = tf.sin(y_true/300), tf.cos(y_true/300)
+    x1, y1 = tf.sin(y_pred/300), tf.cos(y_pred/300)
+    sq_err = (x1-x0)**2 + (y1-y0)**2
+    return tf.reduce_mean(sq_err, axis=-1)
+
 class Masks():
     def __init__(self, n_pins):
         self.n_pins = n_pins
@@ -57,36 +129,41 @@ class Masks():
 
     ## a,b(10,999) -> idx(10,999)
     def t_path2mask_idx(self, a, b):
-        a = tf.math.floormod(tf.cast(a, dtype=tf.int32), self.n_pins)
-        b = tf.math.floormod(tf.cast(b, dtype=tf.int32), self.n_pins)
+        a = tf.math.floormod(a, self.n_pins)
+        b = tf.math.floormod(b, self.n_pins)
+        a = tf.cast(a, dtype=tf.int32)
+        b = tf.cast(b, dtype=tf.int32)
         tmp1 = tf.gather(self.t_seg2idx, a, axis=0, batch_dims=1)
         tmp2 = tf.gather(tmp1, b, axis=2, batch_dims=1)
         idx = tf.linalg.diag_part(tmp2)
         return idx
 
-    @tf.custom_gradient
-    def loss_function(self, y_true, y_pred):
-        a_true, b_true = (y_true[:,:-1], y_true[:,1:])
-        a_pred, b_pred = (y_pred[:,:-1], y_pred[:,1:])
-
+    def idx_error(self, a_true, b_true, a_test, b_test):
         true_idx = self.t_path2mask_idx(a_true, b_true)
-        pred_idx = self.t_path2mask_idx(a_pred, b_pred)
         true_mask = tf.math.bincount(true_idx, minlength=self.size, dtype=tf.int32, axis=-1)
+
+        pred_idx = self.t_path2mask_idx(a_test, b_test)
         pred_mask = tf.math.bincount(pred_idx, minlength=self.size, dtype=tf.int32, axis=-1)
         err_mask = true_mask-pred_mask
-        err = tf.cast(tf.square(err_mask), dtype=tf.float32) #* self.t_lengths
+        err = tf.cast(tf.square(err_mask), dtype=tf.float32) * self.t_lengths
 
-        loss = tf.reduce_sum(err, axis=-1)
-        norm = 1.0 / tf.reduce_sum(0 * err + 1, axis=-1)
-        loss = tf.transpose(norm * tf.transpose(loss))
+        return err
 
-        pred_idx1 = self.t_path2mask_idx(a_pred, b_pred+1)
-        pred_mask1 = tf.math.bincount(pred_idx1, minlength=self.size, dtype=tf.int32, axis=-1)
-        err_mask1 = pred_mask1 - true_mask
-        err1 = tf.cast(tf.square(err_mask1), dtype=tf.float32) #* self.t_lengths
+    @tf.custom_gradient
+    def loss_function(self, y_true, y_pred):
+        y_true_pad = tf.pad(y_true, [[0,0],[1,0]])
+        y_pred_pad = tf.pad(y_pred, [[0,0],[1,0]])
 
-        derr = tf.gather((err1-err), pred_idx1, batch_dims=1)
-        t_grad = tf.pad(derr, [[0,0], [1, 0]])
+        a_true, b_true = (y_true_pad[:,:-1], y_true)
+        a_pred, b_pred = (y_pred_pad[:,:-1], y_pred)
+
+        err0 = self.idx_error(a_true, b_true, a_pred, b_pred)
+        norm = tf.reduce_sum(0 * err0 + 1, axis=-1)
+        loss = tf.divide(tf.reduce_sum(err0, axis=-1), norm)
+
+        err1 = self.idx_error(a_true, b_true, a_pred, b_pred+1)
+        pred_idx = self.t_path2mask_idx(a_pred, b_pred+1)
+        t_grad = tf.gather((err1-err0), pred_idx, batch_dims=1)
 
         def gradient(y):
             y1 = tf.cast(y, dtype=tf.float32)
@@ -94,3 +171,39 @@ class Masks():
             return (None, g)
 
         return loss, gradient
+
+    # @tf.custom_gradient
+    # def loss_function(self, y_true, y_pred):
+    #     # Add a non-trainable implicit "0" pin to the
+    #     # start of the results (i.e. assume all paths start at pin 0)
+    #     y_true_pad = tf.pad(y_true, [[0,0],[1,0]])
+    #     y_pred_pad = tf.pad(y_pred, [[0,0],[1,0]])
+
+    #     a_true, b_true = (y_true_pad[:,:-1], y_true_pad[:,1:])
+    #     a_pred, b_pred = (y_pred_pad[:,:-1], y_pred_pad[:,1:])
+
+    #     true_idx = self.t_path2mask_idx(a_true, b_true)
+    #     true_mask = tf.math.bincount(true_idx, minlength=self.size, dtype=tf.int32, axis=-1)
+
+    #     pred_idx = self.t_path2mask_idx(a_pred, b_pred)
+    #     pred_mask = tf.math.bincount(pred_idx, minlength=self.size, dtype=tf.int32, axis=-1)
+    #     err_mask = true_mask-pred_mask
+    #     err = tf.cast(tf.square(err_mask), dtype=tf.float32) #* self.t_lengths
+
+    #     loss = tf.reduce_sum(err, axis=-1)
+    #     norm = tf.reduce_sum(0 * err + 1, axis=-1)
+    #     loss = tf.divide(loss, norm)
+
+    #     pred_idx1 = self.t_path2mask_idx(a_pred, b_pred+1)
+    #     pred_mask1 = tf.math.bincount(pred_idx1, minlength=self.size, dtype=tf.int32, axis=-1)
+    #     err_mask1 = pred_mask1 - true_mask
+    #     err1 = tf.cast(tf.square(err_mask1), dtype=tf.float32) #* self.t_lengths
+
+    #     t_grad = tf.gather((err1-err), pred_idx1, batch_dims=1)
+
+    #     def gradient(y):
+    #         y1 = tf.cast(y, dtype=tf.float32)
+    #         g = tf.transpose(tf.transpose(t_grad) * y1)
+    #         return (None, g)
+
+    #     return loss, gradient

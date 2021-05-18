@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-import os
 from argparse import ArgumentParser
 
 if __name__ == "__main__":
@@ -25,8 +24,9 @@ if __name__ == "__main__":
     train_parser.add_argument('--num-pins', '-k', type=int, default=300)
     train_parser.add_argument('--batch', '-b', type=int, default=10)
     train_parser.add_argument('--epochs', '-e', type=int, default=1)
-    train_parser.add_argument('--output', '-o', help='Save model to path')
-
+    train_parser.add_argument('--overshoot-epochs', type=int, default=30)
+    train_parser.add_argument('--random-seed', type=int, default=42)
+    train_parser.add_argument('--output', '-o', default='results', help='Path in which to save models and logs')
     train_parser.add_argument('tfrecord', nargs='+', help='Path(s) to tfrecord data')
 
     predict_parser = subparsers.add_parser("predict")
@@ -50,10 +50,9 @@ if __name__ == "__main__":
 
     if args.mode == "train":
         from train import do_train
-        model = do_train(args.tfrecord, args.res, args.path_length, args.num_pins, args.batch, args.epochs)
-        if (args.output):
-            print(f">> Saving model to <{args.output}>")
-            model.save(args.output)
+        do_train(args.tfrecord, args.res, args.path_length, args.output,
+            args.num_pins, args.batch, args.epochs, overshoot_epochs=args.overshoot_epochs,
+            random_seed=args.random_seed)
 
     elif args.mode == "predict":
         from predict import do_predict
@@ -61,10 +60,4 @@ if __name__ == "__main__":
 
     elif args.mode == "prep":
         from prep_dataset import create_tf_records
-        if not os.path.exists(args.output):
-            os.makedirs(args.output)
-
-        assert os.path.isdir(args.input)
-        assert os.path.isdir(args.output)
-
         create_tf_records(args.input, args.output, num_shards=args.num_shards, res=args.res)

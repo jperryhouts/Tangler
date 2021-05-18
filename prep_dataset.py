@@ -27,6 +27,12 @@ def load_example(path_stem: str, res:int) -> tf.train.Example:
     }))
 
 def create_tf_records(input_dir:str, output_dir:str, num_shards:int, res:int) -> None:
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
+    assert os.path.isdir(input_dir)
+    assert os.path.isdir(output_dir)
+
     fnames = glob.glob(os.path.join(input_dir, '*', '*.JPEG'))
 
     n_images = len(fnames)
