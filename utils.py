@@ -15,8 +15,30 @@ def load_img(src: str, res: int) -> np.array:
     return np.array(img)
 
 @tf.function
-def lambda_activation(x):
-    return 600*(1.0 + tf.math.sin(x*3.1415972))
+def lambda_activation(inputs):
+    shape = (-1, 2, inputs.shape[-1]//2)
+    tmp1 = tf.reshape(inputs, shape)
+    tmp2 = tf.add(tmp1, 1e-6*tf.random.normal((2, shape[-1])))
+    x = tmp2[:,0,:]
+    y = tmp2[:,1,:]
+    r = tf.sqrt(x**2 + y**2)
+    rtanh = tf.math.tanh(r)
+    #print(x.shape, y.shape, r.shape, inputs.shape)
+    return inputs * tf.concat([rtanh, rtanh], axis=-1)
+
+class RadialTanh(tf.keras.layers.Layer):
+    def __init__(self, **kwargs):
+        super(RadialTanh, self).__init__(**kwargs)
+
+    def call(self, inputs):
+        shape = (-1, 2, inputs.shape[-1]//2)
+        tmp1 = tf.reshape(inputs, shape)
+        tmp2 = tf.add(tmp1, 1e-6*tf.random.normal((2, shape[-1])))
+        x = tmp2[:,0,:]
+        y = tmp2[:,1,:]
+        r = tf.sqrt(x**2 + y**2)
+        rtanh = tf.math.tanh(r)
+        return inputs * tf.concat([rtanh, rtanh], axis=-1)
 
 class PolarToCartesianLayer(tf.keras.layers.Layer):
     def __init__(self, **kwargs):
@@ -32,10 +54,10 @@ class CartesianToPolar(tf.keras.layers.Layer):
     def call(self, inputs):
         shape = (-1, 2, inputs.shape[-1]//2)
         tmp = tf.reshape(inputs, shape)
-        tmp = tf.add(tmp, 1e-3*tf.random.normal((2, shape[-1])))
+        tmp = tf.add(tmp, 1e-6*tf.random.normal((2, shape[-1])))
         x = tmp[:,0,:]
         y = tmp[:,1,:]
-        theta = tf.atan2(y, x)
+        theta = tf.atan2(-y, x) + np.pi/2
         return theta
 
 class NormalizeCartesianRadius(tf.keras.layers.Layer):
@@ -45,7 +67,7 @@ class NormalizeCartesianRadius(tf.keras.layers.Layer):
     def call(self, inputs):
         shape = (-1, 2, inputs.shape[-1]//2)
         tmp = tf.reshape(inputs, shape)
-        tmp = tf.add(tmp, 1e-3*tf.random.normal((2, shape[-1])))
+        tmp = tf.add(tmp, 1e-6*tf.random.normal((2, shape[-1])))
         x = tmp[:,0,:]
         y = tmp[:,1,:]
         theta = tf.atan2(y, x)
@@ -81,8 +103,10 @@ class ScaleLayer(tf.keras.layers.Layer):
         return i_shifted
 
 def index_error(y_true, y_pred):
-    x0, y0 = tf.sin(y_true/300), tf.cos(y_true/300)
-    x1, y1 = tf.sin(y_pred/300), tf.cos(y_pred/300)
+    y_true_norm = 2*np.pi/300 * y_true
+    y_pred_norm = 2*np.pi/300 * y_pred
+    x0, y0 = tf.sin(y_true_norm), tf.cos(y_true_norm)
+    x1, y1 = tf.sin(y_pred_norm), tf.cos(y_pred_norm)
     sq_err = (x1-x0)**2 + (y1-y0)**2
     return tf.reduce_mean(sq_err, axis=-1)
 

@@ -37,7 +37,7 @@ def do_predict(paths:str, model_path:str, save_to:str=None, res:int=600, n_pins:
         true_pins = np.loadtxt(paths[i][:-5]+'.tsv').astype(int)[:pattern.size]
         true_coords = [masks.pin2coord(pin) for pin in true_pins]
         true_x, true_y = np.array(true_coords).T
-        sns.distplot(true_pins, bins=range(0,n_pins), color='blue', label='true', ax=ax[0][1])
+        sns.histplot(true_pins, bins=range(0,n_pins), color='blue', label='true', kde=True, ax=ax[0][1])
         #ax[0][1].hist(true_pins, bins=range(0,n_pins), color='blue', label='true')
         ax[1][1].plot(true_x, true_y, 'k-', lw=0.03)
         ax[1][1].set_aspect(1.0)
@@ -45,14 +45,14 @@ def do_predict(paths:str, model_path:str, save_to:str=None, res:int=600, n_pins:
         pins = pattern.astype(int)%n_pins
         coords = [masks.pin2coord(pin) for pin in pins]
         x, y = np.array(coords).T
-        sns.distplot(pins, bins=range(0,n_pins), color='orange', label='predicted', ax=ax[0][1])
+        sns.histplot(pins, bins=range(0,n_pins), color='orange', label='predicted', kde=True, ax=ax[0][1])
         #ax[0][1].hist(pins, bins=range(0,n_pins), color='orange', alpha=0.8, label='predicted')
 
         ax[1][0].plot(x, y, 'k-', lw=0.03)
         ax[1][0].set_aspect(1.0)
 
         ax[0][1].set_xlim((0,n_pins))
-        ax[0][1].set_ylim((0,0.015))
+        ax[0][1].set_ylim((0,15))
         ax[0][1].legend()
 
     print(model.summary())
