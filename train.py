@@ -38,47 +38,19 @@ def do_train(tfrecords: List[str], res: int, path_len: int, output_dir: str,
     ## Assemble model
     model = tf.keras.Sequential()
     model.add(tf.keras.layers.InputLayer(input_shape=(res,res,1)))
-    model.add(utils.ScaleLayer(scale=1.0/127.5, offset=-127.5, normalize=False, name='normalize_pixels'))
+    model.add(utils.ScaleLayer(scale=1.0/255.0, offset=0, normalize=False, name='normalize_pixels'))
     model.add(tf.keras.layers.Flatten())
-    model.add(tf.keras.layers.Dense(2*(path_len+1), activation='gelu'))
-        #activity_regularizer=tf.keras.regularizers.L2(l2=0.001)))
-    model.add(utils.ScaleLayer(scale=1.0, offset=0, normalize=True, name='normalize_cartesian'))
-    # model.add(tf.keras.layers.BatchNormalization())
-    model.add(utils.NormalizeCartesianRadius())
-    # model.add(tf.keras.layers.Dense(path_len+1, activation='linear'))
-    #model.add(tf.keras.layers.Dense(2*(path_len+1), activation='linear',
-    #    activity_regularizer=tf.keras.regularizers.L2(l2=0.001)))
-    # model.add(utils.RadialSigmoid())
-    # model.add(tf.keras.layers.BatchNormalization())
-    # model.add(tf.keras.layers.Dense(2*(path_len+1), activation=tf.nn.leaky_relu))
-    # model.add(utils.ScaleLayer(scale=n_pins, offset=0.0, normalize=False, name='scale_shift_polar'))
-    #model.add(utils.ScaleLayer(scale=1.0, offset=0, normalize=True, name='normalize_cartesian'))
-    model.add(utils.CartesianToPolar())
+    #model.add(tf.keras.layers.Dense(2*(path_len+1), activation='gelu'))
+    #model.add(tf.keras.layers.Dense(2*(path_len+1), activation='gelu'))
+    #model.add(tf.keras.layers.Dense(2*(path_len+1), activation=tf.math.sin))
+    #model.add(utils.NormalizeCartesianRadius())
+    #model.add(utils.CartesianToPolar())
+
+    model.add(tf.keras.layers.Dense(path_len+1, activation='relu'))
+    model.add(tf.keras.layers.Dense(path_len+1, activation='relu'))
+    model.add(tf.keras.layers.Dense(path_len+1, activation=tf.math.sin))
     model.add(tf.keras.layers.Dense(path_len+1, activation='linear'))
-    model.add(utils.ScaleLayer(scale=n_pins, normalize=True, name='normalize_polar'))
-    # model.add(tf.keras.layers.Dense(path_len+1, activation='relu'))
-    # model.add(utils.ScaleLayer(scale=n_pins, normalize=False, name='scale_shift_polar'))
-
-    # model.add(tf.keras.layers.Dense(path_len, activation='relu',
-    #     kernel_regularizer=tf.keras.regularizers.L2(l2=0.01)
-    #     ))
-
-    #model.add(tf.keras.layers.SpatialDropout2D(0.5))
-    #model.add(tf.keras.layers.Dense(res*res*0.25, activation='relu'))
-    #model.add(tf.keras.layers.Dense(1000, activation='relu'))
-    ##model.add(tf.keras.layers.Dense(1000, activation='relu'))
-    #model.add(tf.keras.layers.Dense(1000, activation='relu'))
-    #model.add(tf.keras.layers.Dense(1000, activation='relu',
-    #    kernel_regularizer=tf.keras.regularizers.L2(l2=0.01)
-    #    ))
-    #model.add(utils.ScaleLayer(scale=3, offset=0, normalize=False, name='scale_shift_layer'))
-    #model.add(tf.keras.layers.Dense(1000, activation='linear',
-        #kernel_regularizer=tf.keras.regularizers.L2(l2=0.01)
-    #    ))
-    #model.add(tf.keras.layers.Dense(path_len, activation=tf.math.sin))
-    #model.add(tf.keras.layers.Lambda(utils.lambda_activation, output_shape=(path_len,)))
-    #model.add(utils.ScaleLayer(scale=10*n_pins, offset=0, normalize=False, name='scale_shift_layer'))
-
+    model.add(utils.ScaleLayer(scale=n_pins, normalize=False, name='normalize_polar'))
 
     ## Load dataset
     raw_dataset_train = tf.data.TFRecordDataset(tfrecords)
@@ -88,7 +60,7 @@ def do_train(tfrecords: List[str], res: int, path_len: int, output_dir: str,
 
     ## Train model
     masks = utils.Masks(n_pins)
-    model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=1e-2), loss=utils.index_error)
+    model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=1e-4), loss=utils.index_error)
     #model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=5e-5), loss=masks.loss_function)
 
     logdir = os.path.join(output_dir, 'logs', timestamp)
