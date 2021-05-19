@@ -1,18 +1,8 @@
 import datetime, os
-from typing import List
+from typing import Iterable
 import tensorflow as tf
-import numpy as np
 
 import utils
-
-class LRTensorBoard(tf.keras.callbacks.TensorBoard):
-    def __init__(self, log_dir, **kwargs):
-        super().__init__(log_dir=log_dir, **kwargs)
-
-    def on_epoch_end(self, epoch, logs=None):
-        logs = logs or {}
-        logs.update({'lr': tf.keras.backend.eval(self.model.optimizer.lr)})
-        super().on_epoch_end(epoch, logs)
 
 def get_proto_parser(path_len:int):
     def parser(proto):
@@ -29,46 +19,39 @@ def get_proto_parser(path_len:int):
 
     return parser
 
-def do_train(tfrecords: List[str], res: int, path_len: int, output_dir: str,
-            n_pins: int=300, batch_size: int=10, epochs: int=1,
-            overshoot_epochs: int=30, random_seed: int=42) -> None:
+def do_train(train_records:Iterable[str], res:int, path_len:int, output_dir:str,
+            name:str=None, n_pins:int=300, batch_size:int=10, epochs:int=1,
+            overshoot_epochs:int=30, random_seed:int=42) -> None:
     tf.random.set_seed(random_seed)
     timestamp = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
 
     ## Assemble model
     model = tf.keras.Sequential()
-    model.add(tf.keras.layers.InputLayer(input_shape=(res,res,1)))
-    model.add(utils.ScaleLayer(scale=1.0/255.0, offset=0, normalize=False, name='normalize_pixels'))
+    model.add(tf.keras.layers.experimental.preprocessing.Rescaling(1./255, input_shape=(res,res,1)))
     model.add(tf.keras.layers.Flatten())
-    #model.add(tf.keras.layers.Dense(2*(path_len+1), activation='gelu'))
-    #model.add(tf.keras.layers.Dense(2*(path_len+1), activation='gelu'))
-    #model.add(tf.keras.layers.Dense(2*(path_len+1), activation=tf.math.sin))
-    #model.add(utils.NormalizeCartesianRadius())
-    #model.add(utils.CartesianToPolar())
-
-    model.add(tf.keras.layers.Dense(path_len+1, activation='relu'))
-    model.add(tf.keras.layers.Dense(path_len+1, activation='relu'))
-    model.add(tf.keras.layers.Dense(path_len+1, activation=tf.math.sin))
-    model.add(tf.keras.layers.Dense(path_len+1, activation='linear'))
-    model.add(utils.ScaleLayer(scale=n_pins, normalize=False, name='normalize_polar'))
+    model.add(tf.keras.layers.Dense(path_len+1, activation='relu', name='dense_relu_01'))
+    model.add(tf.keras.layers.Dense(path_len+1, activation='relu', name='dense_relu_02'))
+    model.add(tf.keras.layers.Dense(path_len+1, activation='relu', name='dense_relu_03'))
+    model.add(tf.keras.layers.Dense(path_len+1, activation='relu', name='dense_relu_04'))
+    model.add(tf.keras.layers.Dense(path_len+1, activation='relu', name='dense_relu_05'))
+    model.add(tf.keras.layers.Dense(path_len+1, activation=tf.math.sin, name='dense_sine'))
+    model.add(tf.keras.layers.Dense(path_len+1, activation='linear', name='dense_linear'))
+    model.add(tf.keras.layers.experimental.preprocessing.Rescaling(n_pins))
 
     ## Load dataset
-    raw_dataset_train = tf.data.TFRecordDataset(tfrecords)
     parser = get_proto_parser(path_len)
+
+    raw_dataset_train = tf.data.TFRecordDataset(train_records)
     dataset_train = raw_dataset_train.map(parser).shuffle(batch_size*5)
     batched_train = dataset_train.batch(batch_size, drop_remainder=True)
 
     ## Train model
-    masks = utils.Masks(n_pins)
-    model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=1e-4), loss=utils.index_error)
-    #model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=5e-5), loss=masks.loss_function)
+    loss_function = utils.get_loss_function(n_pins)
+    model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=1e-4), loss=loss_function)
 
-    logdir = os.path.join(output_dir, 'logs', timestamp)
     callbacks = [tf.keras.callbacks.EarlyStopping(monitor='loss', patience=overshoot_epochs),
-                tf.keras.callbacks.ModelCheckpoint(filepath=os.path.join(output_dir, 'models', timestamp+'.latest.tf'),
-                                                    monitor='loss', save_best_only=False),
-                tf.keras.callbacks.ModelCheckpoint(filepath=os.path.join(output_dir, 'models', timestamp+'.best.tf'),
-                                                    monitor='loss', save_best_only=True),
-                LRTensorBoard(log_dir=logdir)]
+                #tf.keras.callbacks.ModelCheckpoint(filepath='/tmp/latest.tf', monitor='loss', save_best_only=True),
+                tf.keras.callbacks.TensorBoard(log_dir=os.path.join(output_dir, 'logs', f'{timestamp}_{name}'))]
 
     model.fit(batched_train, epochs=epochs, batch_size=batch_size, callbacks=callbacks)
+    model.save(os.path.join(output_dir, 'models', f'{timestamp}_{name}.final.tf'))

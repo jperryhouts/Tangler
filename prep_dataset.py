@@ -2,7 +2,7 @@ import glob, os
 import numpy as np
 import tensorflow as tf
 
-from utils import load_img
+import utils
 
 def _int_to_feature(value: int) -> tf.train.Feature:
     int64_list = tf.train.Int64List(value=[value])
@@ -14,7 +14,7 @@ def _tensor_to_feature(tensor: tf.Tensor) -> tf.train.Feature:
     return tf.train.Feature(bytes_list=bytes_list)
 
 def load_example(path_stem: str, res:int) -> tf.train.Example:
-    pixels = load_img(path_stem+'.JPEG', res)
+    pixels = utils.load_img(path_stem+'.JPEG', res)
     path = np.loadtxt(path_stem+'.tsv')
 
     t_pixels = tf.convert_to_tensor(pixels.reshape((res,res,1)), dtype=tf.float32)
