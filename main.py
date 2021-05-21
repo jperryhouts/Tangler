@@ -15,6 +15,9 @@ if __name__ == "__main__":
         help="Crop/scale images to squares with RES pixels per side (default: 600)")
     prep_parser.add_argument('--num-shards', '-n', type=int, default=10,
         help="Split dataset into multiple files (default: 10)")
+    prep_parser.add_argument('--num-procs', '-J', type=int, default=10)
+    prep_parser.add_argument('--path-length', '-N', type=int, default=6000)
+    prep_parser.add_argument('--num-pins', '-k', type=int, default=300)
     prep_parser.add_argument('input', help='Root directory for dataset (e.g. ./train)')
     prep_parser.add_argument('output', help='Directory in which to save tfrecord files')
 
@@ -61,4 +64,5 @@ if __name__ == "__main__":
     elif args.mode == "prep":
         from prep_dataset import create_tf_records
         create_tf_records(input_dir=args.input, output_dir=args.output,
-            num_shards=args.num_shards, res=args.res)
+            num_shards=args.num_shards, res=args.res, path_len=args.path_length,
+            n_pins=args.num_pins, n_procs=args.num_procs)
