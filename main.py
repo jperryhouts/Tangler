@@ -68,5 +68,5 @@ if __name__ == "__main__":
             random_seed=args.random_seed)
 
     elif args.mode == "predict":
-        from predict_compressed_mask import do_predict
+        from predict import do_predict
         do_predict(paths=args.fname, model_path=args.model, res=args.res, n_pins=args.num_pins)
