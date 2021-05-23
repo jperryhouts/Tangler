@@ -39,8 +39,8 @@ Inference involves running an image through the network and extracting outputs f
 
 This scheme only requires solving for the same number of output values as the actual length of the path I'm generating (O(N), where N is the number of lines in the resulting path), and is not sensitive to the order in which the lines appear in the training examples. It also preserves information about the spatial layout and inherent symmetry. I managed to construct a convolutional model with good convergence behavior.
 
-<a href="https://raw.githubusercontent.com/jperryhouts/Tangler/docs/model_architecture.png">
-<img src="https://raw.githubusercontent.com/jperryhouts/Tangler/docs/model_architecture.png" width=500 />
+<a href="https://raw.githubusercontent.com/jperryhouts/Tangler/docs/architecture.png">
+<img src="https://raw.githubusercontent.com/jperryhouts/Tangler/docs/architecture.png" width=500 />
 </a>
 
 ## (Preliminary) Results
