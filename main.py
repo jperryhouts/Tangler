@@ -54,7 +54,7 @@ if __name__ == "__main__":
             tf.config.set_visible_devices([], 'GPU')
 
     elif args.mode == "prep":
-        from prep_dataset import create_tf_records
+        from prep import create_tf_records
         create_tf_records(input_dir=args.input, output_dir=args.output,
             n_cons=args.num_cons, num_shards=args.num_shards, res=args.res,
             path_len=args.path_length, n_pins=args.num_pins, n_procs=args.num_procs)
