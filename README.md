@@ -37,6 +37,14 @@ Rather than solving for a sparse NxN matrix, I instead represent the training ta
 
 Inference involves running an image through the network and extracting outputs from the layer before the radial to cartesian split. It's possible to just use the output as is, drawing a line from each pin to all of its connections, but this format also facilitates generating a continuous line path. Basically, just start from some arbitrary pin (say pin 0 for example), then pop a value off the front of row 0 and use that value as the next point in the path. Hop to that new row and pop its first value, and so on. There is always the possibility of returning to a pin more times than would have happened in the original, in which case the inference function will just punt to the next index. That corresponds to a situation where "there are no more good path options from this pin, so go try its neighbor".
 
-This scheme only requires solving for the same number of output values as the actual length of the path I'm generating (O(N), where N is the number of lines in the resulting path), and is not sensitive to the order in which the lines appear in the training examples. It also preserves information about the spatial layout and inherent symmetry. I managed to put together a CNN model that actually converges, which is pretty awesome.
+This scheme only requires solving for the same number of output values as the actual length of the path I'm generating (O(N), where N is the number of lines in the resulting path), and is not sensitive to the order in which the lines appear in the training examples. It also preserves information about the spatial layout and inherent symmetry. I managed to construct a convolutional model with good convergence behavior.
 
-Now the fun part of figuring out what do do with it!
+<a href="https://raw.githubusercontent.com/jperryhouts/Tangler/docs/model_architecture.png">
+<img src="https://raw.githubusercontent.com/jperryhouts/Tangler/docs/model_architecture.png" width=500 />
+</a>
+
+## (Preliminary) Results
+
+This is still a prototype, and therefore the results are still pretty sketchy, but it's clearly moving in the right direction. More training epochs and/or a larger dataset will presumably improve those results.
+
+![example results](docs/examples.png)

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import glob, os
 from argparse import ArgumentParser
 
 if __name__ == "__main__":
@@ -23,18 +24,20 @@ if __name__ == "__main__":
     prep_parser.add_argument('output', help='Directory in which to save tfrecord files')
 
     train_parser = subparsers.add_parser("train", help='Train the model')
-    train_parser.add_argument('--learning-rate', '-lr', type=float, default=1e-3)
-    train_parser.add_argument('--optimizer', type=str, default='adam')
+    train_parser.add_argument('--optimizer', type=str, default='adam_amsgrad')
+    train_parser.add_argument('--learning-rate', '-lr', type=float, default=1e-4)
     train_parser.add_argument('--loss', type=str, default='mse')
-    train_parser.add_argument('--batch', '-b', type=int, default=10)
-    train_parser.add_argument('--epochs', '-e', type=int, default=1)
-    train_parser.add_argument('--steps-per-epoch', '-s', type=int, default=1000)
+    train_parser.add_argument('--batch', '-b', type=int, default=100)
+    train_parser.add_argument('--epochs', '-e', type=int, default=100)
+    train_parser.add_argument('--train-steps-per-epoch', '-ts', type=int, default=2000)
+    train_parser.add_argument('--val-steps-per-epoch', '-vs', type=int, default=200)
     train_parser.add_argument('--overshoot-epochs', type=int, default=30)
     train_parser.add_argument('--checkpoint-period', type=int, default=1)
-    train_parser.add_argument('--random-seed', type=int, default=42)
     train_parser.add_argument('--name', type=str, default=None)
-    train_parser.add_argument('--output', '-o', default='results', help='Path in which to save models and logs')
-    train_parser.add_argument('tfrecord', nargs='+', help='Path(s) to tfrecord data')
+    train_parser.add_argument('--checkpoint-path', type=str, default='/tmp/latest.tf')
+    train_parser.add_argument('--output', '-o', default='results')
+    train_parser.add_argument('--train-data', type=str)
+    train_parser.add_argument('--val-data', type=str)
 
     predict_parser = subparsers.add_parser("predict", help='Run inference on arbitrary image(s)')
     predict_parser.add_argument('--res', '-r', type=int, default=600)
@@ -61,11 +64,15 @@ if __name__ == "__main__":
 
     if args.mode == "train":
         from train import do_train
-        do_train(train_records=args.tfrecord, output_dir=args.output, model_name=args.name,
-            loss=args.loss, optimizer=args.optimizer, learning_rate=args.learning_rate,
+
+        train_records = glob.glob(os.path.join(args.train_data, '*.tfrecord'))
+        val_records = glob.glob(os.path.join(args.val_data, '*.tfrecord'))
+
+        do_train(train_records, val_records, args.output, model_name=args.name,
+            checkpoint_path=args.checkpoint_path, checkpoint_period=args.checkpoint_period,
+            loss_function=args.loss, optimizer=args.optimizer, learning_rate=args.learning_rate,
             batch_size=args.batch, epochs=args.epochs, overshoot_epochs=args.overshoot_epochs,
-            steps_per_epoch=args.steps_per_epoch, checkpoint_period=args.checkpoint_period,
-            random_seed=args.random_seed)
+            train_steps_per_epoch=args.train_steps_per_epoch, val_steps_per_epoch=args.val_steps_per_epoch)
 
     elif args.mode == "predict":
         from predict import do_predict

@@ -46,55 +46,60 @@ def get_data_shape(ds):
     inputs, outputs = ds.take(1).map(proto_parser).as_numpy_iterator().next()
     return (inputs.shape, outputs.shape)
 
-def do_train(train_records:Iterable[str], output_dir:str, model_name:str=None,
-            loss:str='mse', optimizer:str='adam', learning_rate:float=1e-3,
+def do_train(train_records:Iterable[str], val_records:Iterable[str], output_dir:str,
+            model_name:str=None, checkpoint_path:str='/tmp/latest.tf', checkpoint_period:int=1,
+            loss_function:str='mse', optimizer:str='adam', learning_rate:float=1e-3,
             batch_size:int=10, epochs:int=1, overshoot_epochs:int=30,
-            steps_per_epoch:int=1000, checkpoint_period=1, random_seed:int=42) -> None:
-    tf.random.set_seed(random_seed)
+            train_steps_per_epoch:int=2000, val_steps_per_epoch:int=200) -> None:
+    tf.random.set_seed(42)
 
-    ## Load dataset
+    ## Load data
     raw_dataset_train = tf.data.TFRecordDataset(train_records)
     ((res,_,_), (_, n_pins, n_cons)) = get_data_shape(raw_dataset_train)
-    dataset_train = raw_dataset_train.map(proto_parser).shuffle(10000).repeat()
-    batched_train = dataset_train.batch(batch_size, drop_remainder=True)
+    ds_train = raw_dataset_train.map(proto_parser).shuffle(10000).repeat()
+    ds_train = ds_train.batch(batch_size, drop_remainder=True)
+
+    raw_dataset_val = tf.data.TFRecordDataset(val_records)
+    ds_val = raw_dataset_val.map(proto_parser).shuffle(10000).repeat()
+    ds_val = ds_val.batch(batch_size, drop_remainder=True)
 
     ## Define model
     preprocess_layers = [
-        tf.keras.layers.experimental.preprocessing.Rescaling(-1./255, offset=1.0),
+        tf.keras.layers.experimental.preprocessing.Rescaling(-1./255, offset=1.0, name='scale_invert'),
     ]
 
     grouped_convolutional_layers = [
-        [ # bypass
-            tf.keras.layers.MaxPooling2D(pool_size=(5, 5)),
+        [
+            tf.keras.layers.MaxPooling2D(pool_size=(5, 5), name='bypass'),
             tf.keras.layers.Flatten(),
         ],
         [
-            tf.keras.layers.Conv2D(32, 5, padding='same', activation='relu'),
+            tf.keras.layers.Conv2D(32, 5, padding='same', activation='relu', name='conv_32'),
             tf.keras.layers.MaxPooling2D(pool_size=(5,5)),
             tf.keras.layers.Flatten(),
         ],
         [
-            tf.keras.layers.Conv2D(16, 5, padding='same', activation='relu'),
+            tf.keras.layers.Conv2D(16, 5, padding='same', activation='relu', name='conv_16'),
             tf.keras.layers.MaxPooling2D(pool_size=(5, 5)),
             tf.keras.layers.Flatten(),
         ],
     ]
 
     hidden_layers = [
-        tf.keras.layers.Dense(n_pins*n_cons//15, name='dense_1', activation='relu'),
-        tf.keras.layers.Dense(n_pins*n_cons, name='dense_wide_1', activation='relu'),
-        tf.keras.layers.Dense(n_pins*n_cons, name='dense_wide_2'),
+        tf.keras.layers.Dense(n_pins*4, name='dense_relu', activation='relu'),
+        tf.keras.layers.Dense(n_pins*n_cons, name='wide_relu', activation='relu'),
+        tf.keras.layers.Dense(n_pins*n_cons, name='wide_linear'),
         tf.keras.layers.Reshape((1, n_pins, n_cons)),
     ]
 
     grouped_postprocess_layers = [
-        [ tf.keras.layers.Activation(tf.math.sin) ],
-        [ tf.keras.layers.Activation(tf.math.cos) ],
+        [ tf.keras.layers.Activation(tf.math.sin, name='x_pos') ],
+        [ tf.keras.layers.Activation(tf.math.cos, name='y_pos') ],
     ]
 
     ## Assemble model
     if model_name is None:
-        model_name = f"r{res}_k{n_pins}_c{n_cons}_b{batch_size}_{loss}_{optimizer}{learning_rate:g}"
+        model_name = f"r{res}_k{n_pins}_c{n_cons}_b{batch_size}_{loss_function}_{optimizer}{learning_rate:.02e}"
 
     sequence = [tf.keras.Input(shape=(res,res,1))]
 
@@ -146,24 +151,26 @@ def do_train(train_records:Iterable[str], output_dir:str, model_name:str=None,
     loss_norm = 2 * n_cons * n_pins / tf.reduce_sum(loss_weights)
     loss_weights = loss_norm * loss_weights
 
-    model.compile(optimizer=opt, loss=loss, loss_weights=loss_weights.numpy())
+    model.compile(optimizer=opt, loss=loss_function, loss_weights=loss_weights.numpy())
 
     ## Train model
     timestamp = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
 
-    checkpoint_freq = steps_per_epoch*checkpoint_period
+    checkpoint_freq = train_steps_per_epoch*checkpoint_period
     callbacks = [
                 tf.keras.callbacks.EarlyStopping(monitor='loss', patience=overshoot_epochs, restore_best_weights=True),
                 tf.keras.callbacks.TerminateOnNaN(),
-                tf.keras.callbacks.ModelCheckpoint(filepath='/tmp/latest.tf', monitor='loss', save_freq=checkpoint_freq),
-                CustomTensorBoard(log_dir=os.path.join(output_dir, 'logs', f'{timestamp}_{model_name}'))]
+                tf.keras.callbacks.ModelCheckpoint(filepath=checkpoint_path, monitor='loss', save_freq=checkpoint_freq),
+                tf.keras.callbacks.TensorBoard(log_dir=os.path.join(output_dir, 'logs', f'{timestamp}_{model_name}'))]
 
     save_path = os.path.join(output_dir, 'models', f'{timestamp}_{model_name}')
     tf.keras.utils.plot_model(model, to_file=save_path+'.png', show_shapes=True)
     print(model.summary())
 
-    model.fit(batched_train, callbacks=callbacks, batch_size=batch_size,
-        epochs=epochs, steps_per_epoch=steps_per_epoch)
+    sys.exit()
+
+    model.fit(ds_train, validation_data=ds_val, callbacks=callbacks, batch_size=batch_size, epochs=epochs,
+        steps_per_epoch=train_steps_per_epoch, val_steps_per_epoch=val_steps_per_epoch)
 
     # Save model
     model.save(save_path+'.tf', include_optimizer=False)
