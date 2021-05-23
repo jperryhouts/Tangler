@@ -45,6 +45,6 @@ This scheme only requires solving for the same number of output values as the ac
 
 ## (Preliminary) Results
 
-This is still a prototype, and therefore the results are still pretty sketchy, but it's clearly moving in the right direction. More training epochs and/or a larger dataset will presumably improve those results.
+This is still a prototype, and therefore the results are still pretty sketchy, but it's clearly moving in the right direction. More training epochs and/or a larger dataset will presumably improve those results. The latest model can be downloaded [here](https://storage-9iudgkuqwurq6.s3-us-west-2.amazonaws.com/tangler_models/tangler_model_20210522-180656.tar.gz).
 
 ![example results](docs/examples.png)
