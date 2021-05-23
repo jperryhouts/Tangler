@@ -3,14 +3,14 @@
 from argparse import ArgumentParser
 
 if __name__ == "__main__":
-    parser = ArgumentParser()
+    parser = ArgumentParser('Tangler', usage='python3 main.py [RUNTIME_FLAGS]')
 
     parser.add_argument('--debug', action='store_true', help='Enable TensorFlow debug mode')
     parser.add_argument('--cpu', action='store_true', help='Disable GPU compute')
 
-    subparsers = parser.add_subparsers(dest='mode')
+    subparsers = parser.add_subparsers(dest='mode', title='Mode', description='Which action to perform.')
 
-    prep_parser = subparsers.add_parser("prep")
+    prep_parser = subparsers.add_parser("prep", help='Convert the dataset into .tfrecord format for training')
     prep_parser.add_argument('--res', '-r', type=int, default=600,
         help="Crop/scale images to squares with RES pixels per side (default: 600)")
     prep_parser.add_argument('--num-shards', '-n', type=int, default=10,
@@ -22,7 +22,7 @@ if __name__ == "__main__":
     prep_parser.add_argument('input', help='Root directory for dataset (e.g. ./train)')
     prep_parser.add_argument('output', help='Directory in which to save tfrecord files')
 
-    train_parser = subparsers.add_parser("train")
+    train_parser = subparsers.add_parser("train", help='Train the model')
     train_parser.add_argument('--learning-rate', '-lr', type=float, default=1e-3)
     train_parser.add_argument('--optimizer', type=str, default='adam')
     train_parser.add_argument('--loss', type=str, default='mse')
@@ -36,7 +36,7 @@ if __name__ == "__main__":
     train_parser.add_argument('--output', '-o', default='results', help='Path in which to save models and logs')
     train_parser.add_argument('tfrecord', nargs='+', help='Path(s) to tfrecord data')
 
-    predict_parser = subparsers.add_parser("predict")
+    predict_parser = subparsers.add_parser("predict", help='Run inference on arbitrary image(s)')
     predict_parser.add_argument('--res', '-r', type=int, default=600)
     predict_parser.add_argument('--num-pins', '-k', type=int, default=300)
     predict_parser.add_argument('--model', '-m', help='Path to saved model', required=True)
