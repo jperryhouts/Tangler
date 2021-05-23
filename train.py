@@ -1,34 +1,37 @@
-import datetime, os
+import datetime, os, sys
 from typing import Iterable
 import tensorflow as tf
+from numpy import pi
+from tensorflow.python.keras import activations
+from tensorflow.python.keras.layers.advanced_activations import ReLU
+from tensorflow.python.ops.gen_math_ops import Sin
 
-def get_proto_parser(path_len:int, n_pins:int):
-    @tf.function
-    def parser(proto):
-        example = tf.io.parse_single_example(proto, {
-            'image/pixels': tf.io.FixedLenFeature([], tf.string, default_value=''),
-            'image/size': tf.io.FixedLenFeature([], tf.int64, default_value=0),
-            'target/path': tf.io.FixedLenFeature([], tf.string, default_value=''),
-            'target/mask': tf.io.FixedLenFeature([], tf.string, default_value=''),
-            'target/compressed': tf.io.FixedLenFeature([], tf.string, default_value=''),
-            'target/length': tf.io.FixedLenFeature([], tf.int64, default_value=0)
-        })
+@tf.function
+def proto_parser(proto):
+    example = tf.io.parse_single_example(proto, {
+        'image/pixels': tf.io.FixedLenFeature([], tf.string, default_value=''),
+        'image/size': tf.io.FixedLenFeature([], tf.int64, default_value=0),
+        # 'target/path': tf.io.FixedLenFeature([], tf.string, default_value=''),
+        'target/mask': tf.io.FixedLenFeature([], tf.string, default_value=''),
+        'target/compressed': tf.io.FixedLenFeature([], tf.string, default_value=''),
+        'target/length': tf.io.FixedLenFeature([], tf.int64, default_value=0),
+        'target/npins': tf.io.FixedLenFeature([], tf.int64, default_value=0),
+        'target/cons': tf.io.FixedLenFeature([], tf.int64, default_value=0),
+    })
 
-        #pattern = tf.io.parse_tensor(example['target/path'], tf.float32)
-        #target_pdf = mask_pdf(pattern[1:path_len], pattern[2:path_len+1])
-        target_pdf = tf.io.parse_tensor(example['target/mask'], tf.float32)
+    pixels = tf.io.parse_tensor(example['image/pixels'], tf.float32)
+    res = example['image/size']
+    ex_input = tf.reshape(pixels, (res,res,1))
 
-        pixels = tf.io.parse_tensor(example['image/pixels'], tf.float32)
-        res = example['image/size']
-        ex_input = tf.reshape(pixels, (res,res,1))
+    compressed_mask = tf.io.parse_tensor(example['target/compressed'], tf.float32)
+    #N = example['target/length']
+    n_pins = example['target/npins']
+    n_cons = example['target/cons']
+    # print(n_cons)
+    # print(compressed_mask)
+    ex_output = tf.reshape(compressed_mask, (2, n_pins, n_cons))
 
-        #compressed_mask = tf.io.parse_tensor(example['target/compressed'], tf.float32)
-        #N = example['target/length']
-        #ex_output = tf.reshape(compressed_mask, (N, -1))
-        return [ex_input, target_pdf]
-        #return [ex_input, ex_output]
-
-    return parser
+    return [ex_input, ex_output]
 
 class CustomTensorBoard(tf.keras.callbacks.TensorBoard):
     def __init__(self, log_dir, **kwargs):
@@ -39,54 +42,128 @@ class CustomTensorBoard(tf.keras.callbacks.TensorBoard):
         logs.update({'lr': tf.keras.backend.eval(self.model.optimizer.lr)})
         super().on_epoch_end(epoch, logs)
 
-def do_train(train_records:Iterable[str], res:int, path_len:int, output_dir:str,
-            name:str=None, n_pins:int=300, n_cons:int=10, batch_size:int=10, epochs:int=1,
-            overshoot_epochs:int=30, random_seed:int=42) -> None:
-    tf.random.set_seed(random_seed)
-    timestamp = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
+def get_data_shape(ds):
+    inputs, outputs = ds.take(1).map(proto_parser).as_numpy_iterator().next()
+    return (inputs.shape, outputs.shape)
 
-    ## Assemble model
-    model = tf.keras.Sequential()
-    model.add(tf.keras.layers.experimental.preprocessing.Rescaling(1./255, input_shape=(res,res,1)))
-    # model.add(tf.keras.layers.Conv2D(2, 1))
-    # model.add(tf.keras.layers.MaxPool2D())
-    model.add(tf.keras.layers.Conv2D(16, 3, padding='same', activation='relu'))
-    model.add(tf.keras.layers.MaxPooling2D())
-    model.add(tf.keras.layers.Conv2D(32, 3, padding='same', activation='relu'))
-    model.add(tf.keras.layers.MaxPooling2D())
-    model.add(tf.keras.layers.Conv2D(64, 3, padding='same', activation='relu'))
-    model.add(tf.keras.layers.MaxPooling2D())
-    model.add(tf.keras.layers.Flatten())
-    model.add(tf.keras.layers.Dense(2500, activation='relu', name='dense_relu_01'))
-    # model.add(tf.keras.layers.Dense(2500, activation='relu', name='dense_relu_02'))
-    # model.add(tf.keras.layers.Dense(2500, activation='relu', name='dense_relu_03'))
-    # model.add(tf.keras.layers.Dense(2500, activation='relu', name='dense_relu_04'))
-    # model.add(tf.keras.layers.Dense(2500, activation='relu', name='dense_relu_05'))
-    model.add(tf.keras.layers.Dense(n_pins**2, activation='linear', name='output'))
-    #model.add(tf.keras.layers.Dense(path_len, activation=tf.math.sin, name='dense_sine'))
-    #model.add(tf.keras.layers.Dense(path_len, activation='linear', name='dense_linear'))
-    #model.add(tf.keras.layers.experimental.preprocessing.Rescaling(n_pins))
+def do_train(train_records:Iterable[str], output_dir:str, model_name:str=None,
+            loss:str='mse', optimizer:str='adam', learning_rate:float=1e-3,
+            batch_size:int=10, epochs:int=1, overshoot_epochs:int=30,
+            steps_per_epoch:int=1000, checkpoint_period=1, random_seed:int=42) -> None:
+    tf.random.set_seed(random_seed)
 
     ## Load dataset
-    parser = get_proto_parser(path_len, n_pins)
-
     raw_dataset_train = tf.data.TFRecordDataset(train_records)
-    dataset_train = raw_dataset_train.map(parser).shuffle(batch_size*5)
+    ((res,_,_), (_, n_pins, n_cons)) = get_data_shape(raw_dataset_train)
+    dataset_train = raw_dataset_train.map(proto_parser).shuffle(10000).repeat()
     batched_train = dataset_train.batch(batch_size, drop_remainder=True)
 
+    ## Define model
+    preprocess_layers = [
+        tf.keras.layers.experimental.preprocessing.Rescaling(-1./255, offset=1.0),
+    ]
+
+    grouped_convolutional_layers = [
+        [ # bypass
+            tf.keras.layers.MaxPooling2D(pool_size=(5, 5)),
+            tf.keras.layers.Flatten(),
+        ],
+        [
+            tf.keras.layers.Conv2D(32, 5, padding='same', activation='relu'),
+            tf.keras.layers.MaxPooling2D(pool_size=(5,5)),
+            tf.keras.layers.Flatten(),
+        ],
+        [
+            tf.keras.layers.Conv2D(16, 5, padding='same', activation='relu'),
+            tf.keras.layers.MaxPooling2D(pool_size=(5, 5)),
+            tf.keras.layers.Flatten(),
+        ],
+    ]
+
+    hidden_layers = [
+        tf.keras.layers.Dense(n_pins*n_cons//15, name='dense_1', activation='relu'),
+        tf.keras.layers.Dense(n_pins*n_cons, name='dense_wide_1', activation='relu'),
+        tf.keras.layers.Dense(n_pins*n_cons, name='dense_wide_2'),
+        tf.keras.layers.Reshape((1, n_pins, n_cons)),
+    ]
+
+    grouped_postprocess_layers = [
+        [ tf.keras.layers.Activation(tf.math.sin) ],
+        [ tf.keras.layers.Activation(tf.math.cos) ],
+    ]
+
+    ## Assemble model
+    if model_name is None:
+        model_name = f"r{res}_k{n_pins}_c{n_cons}_b{batch_size}_{loss}_{optimizer}{learning_rate:g}"
+
+    sequence = [tf.keras.Input(shape=(res,res,1))]
+
+    for layer in preprocess_layers:
+        sequence.append(layer(sequence[-1]))
+
+    if len(grouped_convolutional_layers) > 0:
+        convolutional_layers = []
+        for group in grouped_convolutional_layers:
+            sub_sequence = [group[0](sequence[-1])]
+            for layer in group[1:]:
+                sub_sequence.append(layer(sub_sequence[-1]))
+            convolutional_layers.append(sub_sequence[-1])
+
+        sequence.append(tf.keras.layers.Concatenate(axis=-1)(convolutional_layers))
+
+    for layer in hidden_layers:
+        sequence.append(layer(sequence[-1]))
+
+    postprocess_layers = []
+    for group in grouped_postprocess_layers:
+        sub_sequence = [group[0](sequence[-1])]
+        for layer in group[1:]:
+            sub_sequence.append(layer(sub_sequence[-1]))
+        postprocess_layers.append(sub_sequence[-1])
+
+    sequence.append(tf.keras.layers.Concatenate(axis=1)(postprocess_layers))
+
+    model = tf.keras.models.Model(inputs=sequence[0], outputs=sequence[-1], name=model_name)
+
+    if optimizer == 'adam':
+        opt = tf.keras.optimizers.Adam(learning_rate)
+    elif optimizer == 'adam_amsgrad':
+        opt = tf.keras.optimizers.Adam(learning_rate, amsgrad=True)
+    elif optimizer == 'nadam':
+        opt = tf.keras.optimizers.Nadam(learning_rate)
+    elif optimizer == 'sgd':
+        opt = tf.keras.optimizers.SGD(learning_rate)
+    elif optimizer == 'adadelta':
+        opt = tf.keras.optimizers.Adadelta(learning_rate)
+    elif optimizer == 'rmsprop':
+        opt = tf.keras.optimizers.RMSprop(learning_rate)
+    else:
+        opt = optimizer
+
+    xw = tf.stack([tf.range(0,n_cons,dtype=tf.float32) for _ in range(n_pins)])
+    yw = tf.stack([tf.range(0,n_cons,dtype=tf.float32) for _ in range(n_pins)])
+    loss_weights = 1.0 / (1.0 + (1.0/n_cons)*tf.stack([xw, yw]))
+    loss_norm = 2 * n_cons * n_pins / tf.reduce_sum(loss_weights)
+    loss_weights = loss_norm * loss_weights
+
+    model.compile(optimizer=opt, loss=loss, loss_weights=loss_weights.numpy())
+
     ## Train model
-    model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
-                loss=tf.keras.losses.BinaryCrossentropy(from_logits=True))
-    #optimizer = tf.keras.optimizers.Adam(learning_rate=1e-4)
-    # optimizer = tf.keras.optimizers.Adadelta(learning_rate=1e-1)
-    #dtheta = utils.d_theta_loss(n_pins)
-    #mask_pdf_loss = utils.get_mask_pdf_loss(n_pins)
-    #model.compile(optimizer=optimizer, loss=dtheta, metrics=[mask_pdf_loss])
+    timestamp = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
 
-    callbacks = [tf.keras.callbacks.EarlyStopping(monitor='loss', patience=overshoot_epochs, restore_best_weights=True),
+    checkpoint_freq = steps_per_epoch*checkpoint_period
+    callbacks = [
+                tf.keras.callbacks.EarlyStopping(monitor='loss', patience=overshoot_epochs, restore_best_weights=True),
                 tf.keras.callbacks.TerminateOnNaN(),
-                # tf.keras.callbacks.ModelCheckpoint(filepath='/tmp/latest.tf', monitor='loss', save_best_only=True),
-                CustomTensorBoard(log_dir=os.path.join(output_dir, 'logs', f'{timestamp}_{name}'))]
+                tf.keras.callbacks.ModelCheckpoint(filepath='/tmp/latest.tf', monitor='loss', save_freq=checkpoint_freq),
+                CustomTensorBoard(log_dir=os.path.join(output_dir, 'logs', f'{timestamp}_{model_name}'))]
 
-    model.fit(batched_train, epochs=epochs, batch_size=batch_size, callbacks=callbacks)
-    model.save(os.path.join(output_dir, 'models', f'{timestamp}_{name}.final.tf'))
+    save_path = os.path.join(output_dir, 'models', f'{timestamp}_{model_name}')
+    tf.keras.utils.plot_model(model, to_file=save_path+'.png', show_shapes=True)
+    print(model.summary())
+
+    model.fit(batched_train, callbacks=callbacks, batch_size=batch_size,
+        epochs=epochs, steps_per_epoch=steps_per_epoch)
+
+    # Save model
+    model.save(save_path+'.tf', include_optimizer=False)
