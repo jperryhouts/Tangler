@@ -43,8 +43,26 @@ This scheme only requires solving for the same number of output values as the ac
 <img src="https://raw.githubusercontent.com/jperryhouts/Tangler/main/docs/architecture.png" width=500 />
 </a>
 
+## Data
+
+I am currently using images from [Imagenette](https://github.com/fastai/imagenette), a subset of the Imagenet database. The labels are ignored, and targets are generated using the [Raveler](https://jperryhouts.github.io/raveler/) CLI app. Targets are then converted into the format described in the methods section above. For efficiency, a scaled and cropped grayscale version of each image is saved alongside its calculated target in a set of `.tfrecord` files.
+
+All the preprocessing steps can be reproduced by installing [Raveler](https://jperryhouts.github.io/raveler/) and running Tangler in `prep` mode with the following options:
+
+```
+python3 main.py prep -r 150 -n 10 -J 4 -N 5000 -k 256 -c 60 imagenette/train tfrecords/train
+python3 main.py prep -r 150 -n 10 -J 4 -N 5000 -k 256 -c 60 imagenette/val tfrecords/val
+```
+
+Preprocessed training data can be downloaded from the following urls:
+
+[tangler_training_data.tar.gz](https://storage-9iudgkuqwurq6.s3-us-west-2.amazonaws.com/tangler_training_data_imagenette/tangler_training_data.tar.gz)  
+[tangler_validation_data.tar.gz](https://storage-9iudgkuqwurq6.s3-us-west-2.amazonaws.com/tangler_training_data_imagenette/tangler_validation_data.tar.gz)
+
 ## (Preliminary) Results
 
-This is still a prototype, and therefore the results are still pretty sketchy, but it's clearly moving in the right direction. More training epochs and/or a larger dataset will presumably improve those results. The latest model can be downloaded [here](https://storage-9iudgkuqwurq6.s3-us-west-2.amazonaws.com/tangler_models/tangler_model_20210522-180656.tar.gz).
+This is still a prototype, and therefore the results are still pretty sketchy, but it's clearly moving in the right direction. The model was still converging when I stopped it training, so presumably it could have achieved near perfect accuracy if given enough training time. Note that for this example I was only calculating model loss on the training set, so these results may be over fit to that data.
+
+The latest model can be downloaded [here](https://storage-9iudgkuqwurq6.s3-us-west-2.amazonaws.com/tangler_models/tangler_model_20210522-180656.tar.gz).
 
 ![example results](docs/examples.png)
