@@ -30,7 +30,7 @@ if __name__ == "__main__":
     train_parser.add_argument('--batch', '-b', type=int, default=100)
     train_parser.add_argument('--epochs', '-e', type=int, default=100)
     train_parser.add_argument('--train-steps-per-epoch', '-ts', type=int, default=2000)
-    train_parser.add_argument('--val-steps-per-epoch', '-vs', type=int, default=200)
+    train_parser.add_argument('--val-steps', '-vs', type=int, default=200)
     train_parser.add_argument('--overshoot-epochs', type=int, default=30)
     train_parser.add_argument('--checkpoint-period', type=int, default=1)
     train_parser.add_argument('--name', type=str, default=None)
@@ -72,7 +72,7 @@ if __name__ == "__main__":
             checkpoint_path=args.checkpoint_path, checkpoint_period=args.checkpoint_period,
             loss_function=args.loss, optimizer=args.optimizer, learning_rate=args.learning_rate,
             batch_size=args.batch, epochs=args.epochs, overshoot_epochs=args.overshoot_epochs,
-            train_steps_per_epoch=args.train_steps_per_epoch, val_steps_per_epoch=args.val_steps_per_epoch)
+            train_steps_per_epoch=args.train_steps_per_epoch, val_steps=args.val_steps)
 
     elif args.mode == "predict":
         from predict import do_predict

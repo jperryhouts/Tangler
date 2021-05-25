@@ -50,7 +50,7 @@ def do_train(train_records:Iterable[str], val_records:Iterable[str], output_dir:
             model_name:str=None, checkpoint_path:str='/tmp/latest.tf', checkpoint_period:int=1,
             loss_function:str='mse', optimizer:str='adam', learning_rate:float=1e-3,
             batch_size:int=10, epochs:int=1, overshoot_epochs:int=30,
-            train_steps_per_epoch:int=2000, val_steps_per_epoch:int=200) -> None:
+            train_steps_per_epoch:int=2000, val_steps:int=200) -> None:
     tf.random.set_seed(42)
 
     ## Load data
@@ -167,10 +167,8 @@ def do_train(train_records:Iterable[str], val_records:Iterable[str], output_dir:
     tf.keras.utils.plot_model(model, to_file=save_path+'.png', show_shapes=True)
     print(model.summary())
 
-    sys.exit()
-
     model.fit(ds_train, validation_data=ds_val, callbacks=callbacks, batch_size=batch_size, epochs=epochs,
-        steps_per_epoch=train_steps_per_epoch, val_steps_per_epoch=val_steps_per_epoch)
+        steps_per_epoch=train_steps_per_epoch, validation_steps=val_steps)
 
     # Save model
     model.save(save_path+'.tf', include_optimizer=False)
