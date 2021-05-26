@@ -159,8 +159,8 @@ class Visualizer():
 
         self.close()
 
-def do_demo(model_path:str, source:Any, backend:str, infinite:bool):
+def do_demo(model_path:str, source:Any, backend:str, cycle:bool):
     model = TangledModel(model_path)
-    images = ImageIterator(source, infinite, model.res)
+    images = ImageIterator(source, cycle, model.res)
     vis = Visualizer(model, images, backend)
     vis.run()
