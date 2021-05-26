@@ -9,8 +9,8 @@ TARGETS=$(shell find train val -name '*JPEG' | sed -e 's/JPEG$$/tsv/')
 targets: $(TARGETS)
 
 prep:
-	python3 main.py prep ./data/train ./data/tfrecords/train
-	python3 main.py prep ./data/val ./data/tfrecords/val
+	python3 tangler.py prep ./data/train ./data/tfrecords/train
+	python3 tangler.py prep ./data/val ./data/tfrecords/val
 
 %.model:
-	python3 main.py train -o "$@" ./data/tfrecords/train/*tfrecord
+	python3 tangler.py train -o "$@" ./data/tfrecords/train/*tfrecord

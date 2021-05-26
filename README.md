@@ -50,8 +50,8 @@ I am currently using images from [Imagenette](https://github.com/fastai/imagenet
 All the preprocessing steps can be reproduced by installing [Raveler](https://jperryhouts.github.io/raveler/) and running Tangler in `prep` mode with the following options:
 
 ```
-python3 main.py prep -r 150 -n 10 -J 4 -N 5000 -k 256 -c 60 imagenette/train tfrecords/train
-python3 main.py prep -r 150 -n 10 -J 4 -N 5000 -k 256 -c 60 imagenette/val tfrecords/val
+python3 tangler.py prep -r 150 -n 10 -J 4 -N 5000 -k 256 -c 60 imagenette/train tfrecords/train
+python3 tangler.py prep -r 150 -n 10 -J 4 -N 5000 -k 256 -c 60 imagenette/val tfrecords/val
 ```
 
 Preprocessed training data can be downloaded from the following urls:
