@@ -27,11 +27,13 @@ if __name__ == "__main__":
     train_parser.add_argument('--optimizer', type=str, default='adam_amsgrad')
     train_parser.add_argument('--learning-rate', '-lr', type=float, default=1e-4)
     train_parser.add_argument('--loss', type=str, default='mse')
+    train_parser.add_argument('--weighted-loss', action='store_true')
+    train_parser.add_argument('--mixed-precision', action='store_true')
     train_parser.add_argument('--batch', '-b', type=int, default=100)
     train_parser.add_argument('--epochs', '-e', type=int, default=100)
     train_parser.add_argument('--train-steps-per-epoch', '-ts', type=int, default=2000)
     train_parser.add_argument('--val-steps', '-vs', type=int, default=200)
-    train_parser.add_argument('--overshoot-epochs', type=int, default=30)
+    train_parser.add_argument('--patience', type=int, default=30)
     train_parser.add_argument('--checkpoint-period', type=int, default=1)
     train_parser.add_argument('--name', type=str, default=None)
     train_parser.add_argument('--checkpoint-path', type=str, default='/tmp/latest.tf')
@@ -77,7 +79,8 @@ if __name__ == "__main__":
         do_train(train_records, val_records, args.output, model_name=args.name,
             checkpoint_path=args.checkpoint_path, checkpoint_period=args.checkpoint_period,
             loss_function=args.loss, optimizer=args.optimizer, learning_rate=args.learning_rate,
-            batch_size=args.batch, epochs=args.epochs, overshoot_epochs=args.overshoot_epochs,
+            weighted_loss=args.weighted_loss, batch_size=args.batch,
+            epochs=args.epochs, patience=args.patience, use_mixed_precision=args.mixed_precision,
             train_steps_per_epoch=args.train_steps_per_epoch, val_steps=args.val_steps)
 
     elif args.mode == "predict":

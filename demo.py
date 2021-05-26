@@ -11,32 +11,17 @@ from glumpy import app, gloo, gl
 import utils
 
 class TangledModel(tf.keras.Model):
-    def __init__(self, model_path:str, path_len:int=8000) -> None:
-        self.path_len = path_len
+    def __init__(self, model_path:str, max_path_len:int=int(2e5)) -> None:
+        self.max_path_len = max_path_len
         base_model = tf.keras.models.load_model(model_path)
         super().__init__(base_model.input, base_model.layers[-4].output)
         self.res = self.input.type_spec.shape[1]
         self.n_pins = self.output.type_spec.shape[2]
 
-    def theta_to_pins(self, thetas:np.ndarray) -> np.ndarray:
-        ppins = (self.n_pins*thetas/(2*np.pi)).astype(np.int)%self.n_pins
-        ppins = ppins.tolist()
-
-        pins = [0]
-        while len(pins) < self.path_len:
-            prev_pin = pins[-1]
-            options = ppins[prev_pin]
-            next_pin = options.pop(0) if len(options) > 0 else (prev_pin+1)%self.n_pins
-            if next_pin == prev_pin:
-                next_pin = options.pop(0) if len(options) > 0 else (prev_pin+1)%self.n_pins
-            pins.append(next_pin)
-
-        return np.array(pins)
-
     def predict(self, inputs:np.ndarray) -> np.ndarray:
         img = inputs.astype(np.float32).reshape((1,self.res,self.res,1))
         thetas = super().predict(img)[0][0]
-        path = self.theta_to_pins(thetas)
+        path = utils.theta_matrix_to_pin_path(thetas, self.n_pins, self.max_path_len)
         return path
 
 class Camera():
@@ -125,7 +110,7 @@ class Visualizer():
                 plt.pause(0.1)
         else:
             window = app.Window(512, 512, color=(1,1,1,1))
-            prog = gloo.Program(count=self.model.path_len,
+            prog = gloo.Program(count=self.model.max_path_len,
                 vertex = '''
                     attribute float pin;
                     void main() {
@@ -141,16 +126,16 @@ class Visualizer():
                         gl_FragColor = vec4(0.0, 0.0, 0.0, 1e-1);
                     }
                     ''')
-            prog["pin"] = np.zeros((self.model.path_len,), dtype=np.float32)
+            prog["pin"] = np.zeros((self.model.max_path_len,), dtype=np.float32)
 
             @window.event
             def on_draw(dt):
                 img = self.source.__next__()
                 path = self.model.predict(img)
-
                 window.clear()
                 prog.draw(gl.GL_LINE_STRIP)
-                prog["pin"][:] = path.astype(np.float32)
+                prog["pin"][:] = np.zeros((self.model.max_path_len,), dtype=np.float32)
+                prog["pin"][:path.size] = path.astype(np.float32)
 
                 if self.source.type == "files":
                     time.sleep(0.5)
