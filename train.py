@@ -1,4 +1,4 @@
-import datetime, os, sys
+import datetime, os
 from typing import Iterable
 import tensorflow as tf
 

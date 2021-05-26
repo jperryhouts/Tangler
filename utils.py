@@ -1,9 +1,17 @@
 import itertools
 from typing import Tuple, Any
 import numpy as np
-from PIL import Image, ImageOps
 import tensorflow as tf
-import cv2
+
+try:
+    from PIL import Image, ImageOps
+except:
+    print("Unable to load PIL package")
+
+try:
+    import cv2
+except:
+    print("Unable to load OpenCV package")
 
 def _int_to_feature(value: int) -> tf.train.Feature:
     int64_list = tf.train.Int64List(value=[value])
