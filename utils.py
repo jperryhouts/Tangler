@@ -51,15 +51,16 @@ def decode_example(serialized:tf.Tensor) -> Tuple[tf.Tensor, tf.Tensor]:
         })
 
     res = example['image/res']
-    image = tf.image.decode_jpeg(example['image/encoded'])
-    image = tf.reshape(image, (res, res, 1))
+    image_raw = tf.io.parse_tensor(example['image/encoded'], tf.string)
+    image = tf.image.decode_jpeg(image_raw)
+    input_data = tf.reshape(image, (res, res, 1))
 
     n_pins = example['target/rows']
     n_cols = example['target/cols']
     target = tf.io.parse_tensor(example['target/value'], tf.float32)
-    target = tf.reshape(target, (2, n_pins, n_cols))
+    target_data = tf.reshape(target, (2, n_pins, n_cols))
 
-    return [image, target]
+    return [input_data, target_data]
 
 def pin_path_to_target(path:np.ndarray, n_pins:int, n_cons:int) -> np.ndarray:
     path = path.astype(np.int)
