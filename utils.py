@@ -15,6 +15,21 @@ def load_img(src: str, res: int) -> np.array:
     img = img.resize((res, res), box=crop)
     return np.array(img)
 
+class Mapping():
+    def __init__(self, n_pins:int) -> None:
+        self.n_pins = n_pins
+        self.pin_coords = self.get_pin_mapping(n_pins)
+
+    def get_pin_mapping(self, n_pins:int) -> np.ndarray:
+        thetas = np.arange(n_pins) * 2 * np.pi / n_pins
+        coords = np.zeros((n_pins, 2))
+        coords[:,0] = np.sin(thetas)
+        coords[:,1] = np.cos(thetas)
+        return coords
+
+    def pins2xy(self, pins:np.ndarray) -> np.ndarray:
+        return self.pin_coords[pins].T
+
 def get_mask_pdf_loss(n_pins):
     def mask_pdf(a, b):
         x0 = a + b*n_pins

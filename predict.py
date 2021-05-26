@@ -1,5 +1,4 @@
 
-import sys
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -7,22 +6,7 @@ import tensorflow as tf
 
 import utils
 
-class Mapping():
-    def __init__(self, n_pins:int) -> None:
-        self.n_pins = n_pins
-        self.pin_coords = self.get_pin_mapping(n_pins)
-
-    def get_pin_mapping(self, n_pins:int) -> np.ndarray:
-        thetas = np.arange(n_pins) * 2 * np.pi / n_pins
-        coords = np.zeros((n_pins, 2))
-        coords[:,0] = np.sin(thetas)
-        coords[:,1] = np.cos(thetas)
-        return coords
-
-    def pins2xy(self, pins:np.ndarray) -> np.ndarray:
-        return self.pin_coords[pins].T
-
-def plot_path(pins:np.ndarray, mapping:Mapping, ax:plt.axes) -> None:
+def plot_path(pins:np.ndarray, mapping:utils.Mapping, ax:plt.axes) -> None:
     true_x, true_y = mapping.pins2xy(pins)
     ax.plot(true_x, true_y, 'k-', lw=0.01)
     ax.set_aspect(1.0)
@@ -41,7 +25,7 @@ def do_predict(paths:str, model_path:str, res:int=600, n_pins:int=300) -> None:
     R = np.sqrt(X**2 + Y**2)
     circle_border = np.where(R>1)
 
-    mapping = Mapping(n_pins)
+    mapping = utils.Mapping(n_pins)
 
     results = model.predict(np.array(images))
     #print(results.shape)

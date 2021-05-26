@@ -45,10 +45,16 @@ if __name__ == "__main__":
     predict_parser.add_argument('--model', '-m', help='Path to saved model', required=True)
     predict_parser.add_argument('fname', nargs='+', help='Image(s) to convert into thread pattern')
 
+    demo_parser = subparsers.add_parser("demo", help='Run inferences in demonstration mode')
+    demo_parser.add_argument('--model', '-m', help='Saved model path', required=True)
+    demo_parser.add_argument('--backend', default='opengl', help='Rendering backend (opengl|matplotlib)')
+    demo_parser.add_argument('--cycle', action='store_true', help='Repeat input images indefinitely')
+    demo_parser.add_argument('input', nargs='*', help='File names for inference. Defaults to webcam input')
+
     args = parser.parse_args()
 
-    import tensorflow as tf
     if (args.debug or args.cpu):
+        import tensorflow as tf
         if (args.debug):
             tf.config.run_functions_eagerly(True)
             tf.data.experimental.enable_debug_mode()
@@ -77,3 +83,8 @@ if __name__ == "__main__":
     elif args.mode == "predict":
         from predict import do_predict
         do_predict(paths=args.fname, model_path=args.model, res=args.res, n_pins=args.num_pins)
+
+    elif args.mode == "demo":
+        from demo import do_demo
+        source = args.input if len(args.input) > 0 else 'webcam'
+        do_demo(model_path=args.model, source=source, backend=args.backend, infinite=args.infinite)
