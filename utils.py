@@ -90,9 +90,10 @@ def theta_matrix_to_pin_path(thetas:np.ndarray, n_pins:int, max_len:int) -> np.n
 
     n_empty = 0
 
-    pins = [0]
-    while n_empty < n_pins and len(pins) < max_len:
-        prev_pin = pins[-1]
+    path_len = 1
+    path = np.zeros(max_len, dtype=np.int)
+    while n_empty < n_pins and path_len < max_len:
+        prev_pin = path[path_len-1]
         options = ppins[prev_pin]
 
         was_non_empty = (len(options) > 0)
@@ -106,9 +107,11 @@ def theta_matrix_to_pin_path(thetas:np.ndarray, n_pins:int, max_len:int) -> np.n
         if was_non_empty and is_now_empty:
             n_empty += 1
 
-        pins.append(next_pin)
+        path[path_len] = next_pin
 
-    return np.array(pins)
+        path_len += 1
+
+    return path
 
 class Mapping():
     def __init__(self, n_pins:int) -> None:
