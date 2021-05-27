@@ -69,6 +69,7 @@ def decode_example(serialized:tf.Tensor) -> Tuple[tf.Tensor, tf.Tensor]:
     n_cols = example['target/cols']
     target = tf.io.parse_tensor(example['target/value'], tf.float32)
     target_data = tf.reshape(target, (2, n_pins, n_cols))
+    #target_data = target_data[:,:,:n_cols//4]
 
     return [input_data, target_data]
 
@@ -86,16 +87,25 @@ def pin_path_to_target(path:np.ndarray, n_pins:int, n_cons:int) -> np.ndarray:
             res[b].add(a)
 
     for i in range(len(res)):
-        res[i] = list(res[i])
+        ## Sort columns by distance from pin i
+        r_i = np.array(list(res[i]))
+        #R = abs((abs(r_i-i)+n_pins//2)%n_pins-n_pins//2)
+        #Rr = sorted(zip(R, r_i), key=lambda x: x[0], reverse=True)
+        #res[i] = [x[1] for x in Rr]
+
+        res[i] = sorted((r_i-i)%n_pins, reverse=True)
+
         while len(res[i]) < n_cons:
-            res[i].append(i+1)
+            res[i].append(1)
 
     theta = 2 * np.pi * np.array(res) / n_pins
     res = np.array([np.sin(theta), np.cos(theta)])
     return res
 
 def theta_matrix_to_pin_path(thetas:np.ndarray, n_pins:int, max_len:int) -> np.ndarray:
-    ppins = (n_pins*thetas/(2*np.pi)).astype(np.int)%n_pins
+    ppins = (n_pins*thetas/(2*np.pi)).astype(np.int)
+    for i in range(n_pins):
+        ppins[i] = (ppins[i]+i)%n_pins
     ppins = ppins.tolist()
 
     n_empty = 0
@@ -120,6 +130,8 @@ def theta_matrix_to_pin_path(thetas:np.ndarray, n_pins:int, max_len:int) -> np.n
         path[path_len] = next_pin
 
         path_len += 1
+
+    # print("Path length:",path_len)
 
     return path
 
@@ -148,7 +160,7 @@ class CustomTensorBoard(tf.keras.callbacks.TensorBoard):
         super().on_epoch_end(epoch, logs)
 
 class TangledModel(tf.keras.Model):
-    def __init__(self, model_path:str, max_path_len:int=int(2e5)) -> None:
+    def __init__(self, model_path:str, max_path_len:int=int(200e3)) -> None:
         self.max_path_len = max_path_len
         base_model = tf.keras.models.load_model(model_path)
         super().__init__(base_model.input, base_model.layers[-4].output)
@@ -158,6 +170,10 @@ class TangledModel(tf.keras.Model):
     def predict(self, inputs:np.ndarray) -> np.ndarray:
         img = inputs.astype(np.float32).reshape((1,self.res,self.res,1))
         thetas = super().predict(img)[0][0]
+        return thetas
+
+    def predict_convert(self, inputs:np.ndarray) -> np.ndarray:
+        thetas = self.predict(inputs)
         path = theta_matrix_to_pin_path(thetas, self.n_pins, self.max_path_len)
         return path
 

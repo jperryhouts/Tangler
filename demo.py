@@ -37,7 +37,7 @@ class Visualizer():
                 self.axes[0].clear()
                 self.axes[0].imshow(img.reshape((self.model.res, self.model.res)), cmap=plt.cm.gray, vmin=0, vmax=255)
 
-                path = self.model.predict(img)
+                path = self.model.predict_convert(img)
                 x, y = self.mapping.pins2xy(path)
                 self.axes[1].clear()
                 self.axes[1].plot(x, y, 'k-', lw=0.01)
@@ -67,7 +67,7 @@ class Visualizer():
             @window.event
             def on_draw(dt):
                 img = self.source.__next__()
-                path = self.model.predict(img)
+                path = self.model.predict_convert(img)
                 window.clear()
                 prog.draw(gl.GL_LINE_STRIP)
                 prog["pin"][:] = np.zeros((self.model.max_path_len,), dtype=np.float32)

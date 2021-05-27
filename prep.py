@@ -9,14 +9,14 @@ import tensorflow as tf
 import utils
 
 def load_example(img_fname:str, res:int, path_len:int, n_pins:int, n_cons:int) -> tf.train.Example:
-    args = ['raveler', img_fname, '-r', 600, '-n', path_len, '-k', n_pins, '-w', '100e-6', '-f', 'tsv']
+    args = ['raveler', img_fname, '-r', res, '-n', path_len, '-k', n_pins, '-w', '100e-6', '-f', 'tsv']
     sp = subprocess.Popen(list(map(str, args)), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     try:
         path = np.loadtxt(sp.stdout).T[0].astype(np.int)
-        target = utils.pin_path_to_target(path, n_pins, n_cons)
     except Exception as _:
         logging.warn(">> ERROR:"+ sp.stderr.read().decode('utf-8'))
         return None
+    target = utils.pin_path_to_target(path, n_pins, n_cons)
 
     image = utils.load_img(img_fname, res).astype(np.uint8)
     image = image.reshape((res,res,1))

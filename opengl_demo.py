@@ -7,7 +7,7 @@ import utils
 
 def do_demo(model_path):
     model = utils.TangledModel(model_path)
-    image_source = utils.ImageIterator('webcam', False, model.res)
+    image_source = utils.ImageIterator('webcam', True, model.res)
 
     vertex_src = '''
     in float pin;
@@ -61,7 +61,7 @@ def do_demo(model_path):
         glfw.poll_events()
 
         img = image_source.__next__()
-        path[:] = model.predict(img).astype(np.float32)
+        path[:] = model.predict_convert(img).astype(np.float32)
 
         glClear(GL_COLOR_BUFFER_BIT)
         glBufferData(GL_ARRAY_BUFFER, path.nbytes, path, GL_DYNAMIC_COPY)
