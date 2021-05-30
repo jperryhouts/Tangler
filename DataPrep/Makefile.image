@@ -4,7 +4,7 @@
 ## e.g.:
 ##    DATA="$HOME/Data/imagenet" make -j8 ravel
 
-DATA=$(or $(DATA), "/DATA")
+DATA="/DATA"
 
 PATTERNS=$(shell find $(DATA) -name '*JPEG' | sed -e 's/JPEG$$/raveled/')
 NORMALIZED=$(shell find $(DATA) -name '*JPEG' | sed -e 's/JPEG$$/_norm.jpg/')
