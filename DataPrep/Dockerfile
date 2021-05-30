@@ -3,13 +3,7 @@ FROM ubuntu:18.04
 # Fix DL4006
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
-ARG userid="1000"
-ARG groupid="1000"
-ARG username="tangler"
-
 USER root
-
-RUN useradd -m -u ${userid} -g ${groupid} ${username}
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
@@ -23,6 +17,8 @@ RUN git clone https://github.com/jperryhouts/raveler.git && \
     make cli && \
     mv build/cli/raveler /usr/bin
 
-USER ${username}
+RUN mkdir -p /var/tangler
 
-WORKDIR /home/${username}
+COPY Makefile.image /var/tangler/Makefile
+
+WORKDIR /var/tangler
