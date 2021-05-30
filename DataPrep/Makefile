@@ -5,7 +5,7 @@
 PATTERNS=$(shell find $(DATA) -name '*JPEG' | sed -e 's/JPEG$$/raveled/')
 NORMALIZED=$(shell find $(DATA) -name '*JPEG' | sed -e 's/JPEG$$/_norm.jpg/')
 
-.PHONY: ravel norm
+.PHONY: ravel norm docker-build docker-run
 
 ravel: $(PATTERNS)
 
@@ -21,9 +21,13 @@ norm: $(NORMALIZED)
 		| awk '/^[0-9]/{print($$1)}' > "$@"
 	@if [ `du -s "$@" | cut -f 1` -eq 0 ]; then echo "Failed <$@>"; rm "$@"; fi
 
-prep:
-	python3 tangler.py prep ./data/train ./data/tfrecords/train
-	python3 tangler.py prep ./data/val ./data/tfrecords/val
+docker-build:
+	docker build -t tangler/data_prep .
 
-%.model:
-	python3 tangler.py train -o "$@" ./data/tfrecords/train/*tfrecord
+docker-run:
+	docker run -it --rm \
+		-v "$(DATA):/DATA" \
+		-e username=$(shell whoami) \
+		-e userid=$(shell id -u) \
+		-e groupid=$(shell id -g) \
+		tangler/data_prep
