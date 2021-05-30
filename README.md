@@ -45,9 +45,9 @@ This scheme only requires solving for the same number of output values as the ac
 
 ## Data
 
-I am currently using images from [Imagenette](https://github.com/fastai/imagenette), a subset of the Imagenet database. The labels are ignored, and targets are generated using the [Raveler](https://jperryhouts.github.io/raveler/) CLI app. Targets are then converted into the format described in the methods section above. For efficiency, a scaled and cropped grayscale version of each image is saved alongside its calculated target in a set of `.tfrecord` files.
+I am currently using images from [Imagenette](https://github.com/fastai/imagenette), a subset of the Imagenet database. The labels are ignored, and targets are generated using the [Raveler](https://github.com/jperryhouts/raveler/) CLI app. Targets are then converted into the format described in the methods section above. For efficiency, a scaled and cropped grayscale version of each image is saved alongside its calculated target in a set of `.tfrecord` files.
 
-All the preprocessing steps can be reproduced by installing [Raveler](https://jperryhouts.github.io/raveler/) and running Tangler in `prep` mode with the following options:
+All the preprocessing steps can be reproduced by installing [Raveler](https://github.com/jperryhouts/raveler/) and running Tangler in `prep` mode with the following options:
 
 ```
 python3 tangler.py prep -r 150 -n 10 -J 4 -N 5000 -k 256 -c 60 imagenette/train tfrecords/train
