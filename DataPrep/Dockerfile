@@ -7,7 +7,7 @@ USER root
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-        git build-essential \
+        git build-essential ca-certificates \
         graphicsmagick graphicsmagick-libmagick-dev-compat
 
 WORKDIR /tmp
