@@ -7,8 +7,8 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 USER root
 
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-        wget git build-essential ca-certificates \
+    apt-get install -y --no-install-recommends wget \
+        parallel git build-essential ca-certificates \
         graphicsmagick-libmagick-dev-compat
 
 WORKDIR /tmp
@@ -27,7 +27,7 @@ RUN git clone https://github.com/jperryhouts/raveler.git && \
 
 RUN mkdir -p /var/tangler
 
-COPY Makefile.image /var/tangler/Makefile
+COPY do_ravel.sh /var/tangler/do_ravel.sh
 COPY make_tfrecords.py /var/tangler/make_tfrecords.py
 
 WORKDIR /var/tangler

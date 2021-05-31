@@ -29,7 +29,13 @@ docker build -t tangler/data_prep .
 Processing each individual image takes under a second, but on a dataset with over a million samples this can become very time consuming. The algorithm does not need much RAM, but access to a large number of cores is essential. With the container setup as described above, converting all images in the dataset can be done with:
 
 ```bash
-docker run -it --rm -v "$HOME/Data:/DATA" tangler/data_prep make -j128 ravel
+docker run -it --rm -v "$HOME/Data:/DATA" tangler/data_prep bash
+```
+
+```bash
+find /DATA -name '*JPEG' | while read fn ; do
+    if [ ! -f "${fn%.*}.raveled" ]; then echo "$fn" ; fi
+done | parallel -j200 bash do_ravel.sh {}
 ```
 
 For each image, `$HOME/Data/**/*.JPEG`, this will generate a normalized version: `$HOME/Data/**/*_norm.jpg`, and a target string sequence: `$HOME/Data/**/*.raveled`.
