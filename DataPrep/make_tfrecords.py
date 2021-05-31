@@ -21,7 +21,7 @@ def _bytes_to_feature(values:str) -> tf.train.Feature:
     return tf.train.Feature(bytes_list=tf.train.BytesList(value=[values]))
 
 def files_to_example(base_path:str, n_pins:int=256) -> tf.train.Example:
-    image_path = f"{base_path}_norm.jpg"
+    image_path = f"{base_path}.jpg"
     target_path = f"{base_path}.raveled"
 
     raveled = np.loadtxt(target_path, dtype=np.int).flatten()
@@ -52,48 +52,48 @@ class Shard():
         self.path = path
         self.basename = os.path.basename(self.path)
 
-    def append(self, base_path:str):
-        self.examples.append(base_path)
+    def append(self, stem:str):
+        self.examples.append(stem)
 
     def save(self) -> None:
         print(f">> Saving shard {self.basename} with {len(self.examples)} records.")
-        with tf.io.TFRecordWriter(self.fname) as tfrecord_writer:
-            for base in self.examples:
-                example = files_to_example(base)
+        with tf.io.TFRecordWriter(self.path) as tfrecord_writer:
+            for stem in self.examples:
+                example = files_to_example(stem)
                 if example is not None:
                     tfrecord_writer.write(example.SerializeToString())
         print(f">> Completed saving {self.basename}")
 
 def write_records(input_dir:str, output_dir:str, num_shards:int=10, sequential:bool=False) -> None:
     assert os.path.isdir(input_dir)
-    img_fnames = list(Path(input_dir).rglob('*_norm.jpg'))
-    base_paths = [fname[:-len("_norm.jpg")] for fname in img_fnames]
-    assert len(base_paths) > 0
+    get_stem = lambda p: os.path.join(p.parent.absolute(), p.stem)
+    examples = [get_stem(path) for path in Path(input_dir).rglob('*.jpg')]
+    assert len(examples) > 0
 
-    print(f">> Found {len(base_paths)} examples.")
+    print(f">> Found {len(examples)} examples.")
 
-    random.shuffle(base_paths)
+    random.shuffle(examples)
 
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
     assert os.path.isdir(output_dir)
 
-    num_per_shard = int(math.ceil(len(base_paths)/float(num_shards)))
+    num_per_shard = int(math.ceil(len(examples)/float(num_shards)))
 
     shards = []
     for i in range(num_shards):
         tfrecord = f"tangle_{(i+1):05d}-of-{num_shards:05d}.tfrecord"
         shard = Shard(os.path.join(output_dir, tfrecord))
-        for base in base_paths[i*num_per_shard:(i+1)*num_per_shard]:
-            img = f"{base}_norm.jpg"
+        for stem in examples[i*num_per_shard:(i+1)*num_per_shard]:
+            img = f"{stem}.jpg"
             if not os.path.isfile(img):
                 print(f">> Image not found: {img}")
                 continue
-            target = f"{base}.raveled"
+            target = f"{stem}.raveled"
             if not os.path.isfile(target):
                 print(f">> Target not found: {target}")
                 continue
-            shard.append(base)
+            shard.append(stem)
 
         shards.append(shard)
 

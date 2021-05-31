@@ -43,7 +43,13 @@ find /DATA -name '*JPEG' | while read fn ; do
 done | parallel -j200 bash do_ravel.sh {}
 ```
 
-For each image, `$HOME/Data/**/*.JPEG`, this will generate a normalized version: `$HOME/Data/**/*_norm.jpg`, and a target string sequence: `$HOME/Data/**/*.raveled`.
+For each image, `$HOME/Data/**/*.JPEG`, this will generate a normalized version: `$HOME/Data/**/*.jpg`, and a target string sequence: `$HOME/Data/**/*.raveled`. Note that I am over-allocating resources by a lot, hoping that will prompt the operating system to do a lot of IO operations in the background and saturate the CPU resources (this was run on an EC2 instance with 32 cores). In my case I was able to process about 2200 images per minute, but you might get more mileage out of requesting fewer parallel processes.
+
+Once you're certain that the above command completed successfully, you can delete the original images:
+
+```bash
+find /DATA -name '*JPEG' -exec rm "{}" \;
+```
 
 ## Stage 2: Concatenate examples into .tfrecord files
 
