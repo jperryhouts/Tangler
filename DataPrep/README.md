@@ -14,6 +14,8 @@ The data preprocessing container can be configured on an EC2 instance as follows
 ```bash
 sudo yum install git docker
 
+sudo service docker start
+
 sudo usermod -a -G docker ec2-user
 # [log out / in]
 
@@ -24,13 +26,16 @@ cd Tangler/DataPrep
 docker build -t tangler/data_prep .
 ```
 
-## Stage 1: Generate training examples
-
-Processing each individual image takes under a second, but on a dataset with over a million samples this can become very time consuming. The algorithm does not need much RAM, but access to a large number of cores is essential. With the container setup as described above, converting all images in the dataset can be done with:
+Once the image is built, start an interactive terminal session:
 
 ```bash
 docker run -it --rm -v "$HOME/Data:/DATA" tangler/data_prep bash
 ```
+
+## Stage 1: Generate training examples
+
+Processing each individual image takes under a second, but on a dataset with over a million samples this can become very time consuming. The algorithm does not need much RAM, but access to a large number of cores is essential. With the container setup as described above, convert all images into string patterns:
+
 
 ```bash
 find /DATA -name '*JPEG' | while read fn ; do
@@ -42,8 +47,8 @@ For each image, `$HOME/Data/**/*.JPEG`, this will generate a normalized version:
 
 ## Stage 2: Concatenate examples into .tfrecord files
 
-One of the biggest bottlenecks in training with large datasets is file access. Network filesystems are especially ill-equipped to deal with large numbers of small files. A major speed-up can be gained by concatenating many individual examples into larger files. This is done by `make_tfrecords.py`, from within the same container:
+One major bottleneck in training neural networks with large datasets is file access. Network filesystems are especially ill-equipped to deal with large numbers of small files. A major speed-up can be gained by concatenating many individual examples into larger files. This is done by `make_tfrecords.py`, from within the same container:
 
 ```bash
-docker run -it --rm -v "$HOME/Data:/DATA" tangler/data_prep python3 make_tfrecords.py "/DATA/train" "/DATA/tfrecords/train"
+python3 make_tfrecords.py "/DATA/train" "/DATA/tfrecords/train"
 ```
