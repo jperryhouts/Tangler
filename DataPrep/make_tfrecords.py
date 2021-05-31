@@ -25,7 +25,7 @@ def files_to_example(base_path:str, n_pins:int=256) -> tf.train.Example:
     target_path = f"{base_path}.raveled"
 
     raveled = np.loadtxt(target_path, dtype=np.int).flatten()
-    if not raveled or len(raveled) == 0:
+    if raveled is None or len(raveled) == 0:
         print(f">> Unable to load raveled sequence <{target_path}>")
         return None
     if raveled.min() < 0 or raveled.max() >= n_pins:
