@@ -8,8 +8,7 @@ USER root
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends wget \
-        parallel git build-essential ca-certificates \
-        graphicsmagick-libmagick-dev-compat
+        parallel git build-essential ca-certificates
 
 WORKDIR /tmp
 
@@ -17,12 +16,12 @@ RUN wget http://www.imagemagick.org/download/ImageMagick.tar.gz && \
     tar -xvf ImageMagick.tar.gz && \
     cd ImageMagick-* && \
     ./configure --prefix=/usr && \
-    make && \
+    make -j32 && \
     make install
 
 RUN git clone https://github.com/jperryhouts/raveler.git && \
     cd raveler && \
-    make cli && \
+    NOMAGICK=1 make cli && \
     mv build/cli/raveler /usr/bin
 
 RUN mkdir -p /var/tangler
