@@ -4,6 +4,7 @@ import math, os, random
 from argparse import ArgumentParser
 from pathlib import Path
 from multiprocessing import Process
+from typing import Iterable
 import numpy as np
 import tensorflow as tf
 
@@ -11,8 +12,7 @@ def _int_to_feature(value: int) -> tf.train.Feature:
     int64_list = tf.train.Int64List(value=[value])
     return tf.train.Feature(int64_list=int64_list)
 
-def _array_to_feature(array: np.ndarray, dtype=tf.uint8) -> tf.train.Feature:
-    tensor = tf.convert_to_tensor(array, dtype=dtype)
+def _tensor_to_feature(tensor: tf.Tensor) -> tf.train.Feature:
     serialized = tf.io.serialize_tensor(tensor)
     bytes_list = tf.train.BytesList(value=[serialized.numpy()])
     return tf.train.Feature(bytes_list=bytes_list)
@@ -37,12 +37,14 @@ def files_to_example(base_path:str, n_pins:int=256) -> tf.train.Example:
     assert image_shape[0] == image_shape[1], f'Invalid image shape: {image_shape}'
     image_res = image_shape[0]
 
+    target = tf.convert_to_tensor(raveled.astype(np.uint8), tf.uint8)
+
     return tf.train.Example(features=tf.train.Features(feature={
         'image/encoded': _bytes_to_feature(image_data),
         'image/name': _bytes_to_feature(base_path.encode('utf-8')),
         'image/format': _bytes_to_feature(b'jpeg'),
         'image/res': _int_to_feature(image_res),
-        'target/sequence': _array_to_feature(raveled),
+        'target/sequence': _tensor_to_feature(target),
         'target/length': _int_to_feature(raveled.size)
     }))
 
