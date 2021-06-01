@@ -1,3 +1,4 @@
+import time
 import numpy as np
 import glfw
 from OpenGL.GL import *
@@ -5,9 +6,9 @@ from OpenGL.GL.shaders import compileProgram, compileShader
 
 import utils
 
-def do_demo(model_path):
+def do_demo(model_path, data_source):
     model = utils.TangledModel(model_path)
-    image_source = utils.ImageIterator('webcam', True, model.res)
+    image_source = utils.ImageIterator(data_source, True, model.res)
 
     vertex_src = '''
     in float pin;
@@ -68,6 +69,9 @@ def do_demo(model_path):
         glDrawArrays(GL_LINES, 0, path.size)
 
         glfw.swap_buffers(window)
+
+        if image_source.type == 'files':
+            time.sleep(0.1)
 
     image_source.close()
     glfw.terminate()

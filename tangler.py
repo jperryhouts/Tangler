@@ -89,7 +89,7 @@ if __name__ == "__main__":
 
     elif args.mode == "demo":
         from opengl_demo import do_demo
-        do_demo(args.model)
+        source = args.input if len(args.input) > 0 else 'webcam'
+        do_demo(args.model, source)
         #from demo import do_demo
-        #source = args.input if len(args.input) > 0 else 'webcam'
         #do_demo(model_path=args.model, source=source, backend=args.backend, cycle=args.cycle)
