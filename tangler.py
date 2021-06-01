@@ -31,8 +31,8 @@ if __name__ == "__main__":
     train_parser.add_argument('--mixed-precision', action='store_true')
     train_parser.add_argument('--batch', '-b', type=int, default=100)
     train_parser.add_argument('--epochs', '-e', type=int, default=100)
-    train_parser.add_argument('--train-steps-per-epoch', '-ts', type=int, default=2000)
-    train_parser.add_argument('--val-steps', '-vs', type=int, default=200)
+    train_parser.add_argument('--train-steps-per-epoch', '-ts', type=int)
+    train_parser.add_argument('--val-steps', '-vs', type=int)
     train_parser.add_argument('--patience', type=int, default=30)
     train_parser.add_argument('--checkpoint-period', type=int, default=1)
     train_parser.add_argument('--name', type=str, default=None)
@@ -70,11 +70,14 @@ if __name__ == "__main__":
             n_cons=args.num_cons, num_shards=args.num_shards, res=args.res,
             path_len=args.path_length, n_pins=args.num_pins, n_procs=args.num_procs)
 
-    if args.mode == "train":
+    elif args.mode == "train":
         from train import do_train
 
-        train_records = glob.glob(os.path.join(args.train_data, '*.tfrecord'))
-        val_records = glob.glob(os.path.join(args.val_data, '*.tfrecord'))
+        train_records = glob.glob(os.path.join(args.train_data, '*.tfrecord'))[:5]
+        val_records = glob.glob(os.path.join(args.val_data, '*.tfrecord'))[-5:]
+        print(train_records, val_records)
+        #train_records = [f's3://storage-9iudgkuqwurq6/tangler/tfrecords/train/tangle_{i:05d}-of-00016.tfrecord' for i in range(16)]
+        #val_records = [f's3://storage-9iudgkuqwurq6/tangler/tfrecords/val/tangle_{i:05d}-of-00016.tfrecord' for i in range(16)]
 
         do_train(train_records, val_records, args.output, model_name=args.name,
             checkpoint_path=args.checkpoint_path, checkpoint_period=args.checkpoint_period,

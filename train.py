@@ -1,32 +1,60 @@
 import datetime, os
-from typing import Iterable
+from typing import Iterable, Tuple
+import math
 import tensorflow as tf
 
-import utils
+_FEATURES = {
+    'image/encoded': tf.io.FixedLenFeature([], tf.string, default_value=''),
+    'image/name': tf.io.FixedLenFeature([], tf.string, default_value=''),
+    'image/format': tf.io.FixedLenFeature([], tf.string, default_value=b'jpeg'),
+    'image/res': tf.io.FixedLenFeature([], tf.int64, default_value=300),
+    'target/sequence': tf.io.FixedLenFeature([], tf.string),
+    'target/length': tf.io.FixedLenFeature([], tf.int64, default_value=6001),
+}
+
+@tf.function
+def decode_example(serialized:tf.Tensor) -> Tuple[tf.Tensor,tf.Tensor]:
+    example = tf.io.parse_single_example(serialized, _FEATURES)
+
+    res = example['image/res']
+    img_decoded = tf.image.decode_jpeg(example['image/encoded'])
+    img = tf.reshape(img_decoded, (res, res, 1))
+
+    target = tf.io.parse_tensor(example['target/sequence'], tf.uint8)
+    target = 2*math.pi*tf.cast(target, tf.float32)/256
+    target = tf.stack([tf.math.sin(target), tf.math.cos(target)], axis=0)
+
+    return (img, target)
 
 def get_data_shape(ds):
-    inputs, outputs = ds.take(1).map(utils.decode_example).as_numpy_iterator().next()
-    return (inputs.shape, outputs.shape)
+    def get_length(serialized:tf.Tensor) -> Tuple[int,int]:
+        example = tf.io.parse_single_example(serialized, _FEATURES)
+        return (example['image/res'], example['target/length'])
+    res, length = ds.take(1).map(get_length).as_numpy_iterator().next()
+    return (res, length)
 
 def do_train(train_records:Iterable[str], val_records:Iterable[str], output_dir:str,
             model_name:str=None, checkpoint_path:str='/tmp/latest.tf', checkpoint_period:int=1,
             loss_function:str='mse', optimizer:str='adam', learning_rate:float=1e-3,
             weighted_loss:bool=False, batch_size:int=100, use_mixed_precision:bool=False,
-            epochs:int=1, patience:int=30, train_steps_per_epoch:int=2000, val_steps:int=200) -> None:
+            epochs:int=1, patience:int=30, train_steps_per_epoch:int=None, val_steps:int=None) -> None:
     tf.random.set_seed(42)
 
     if use_mixed_precision:
         tf.keras.mixed_precision.set_global_policy("mixed_float16")
 
     ## Load data
-    raw_dataset_train = tf.data.TFRecordDataset(train_records)
-    ((res,_,_), (_, n_pins, n_cons)) = get_data_shape(raw_dataset_train)
-    ds_train = raw_dataset_train.map(utils.decode_example).shuffle(5*batch_size).repeat()
-    ds_train = ds_train.batch(batch_size, drop_remainder=True)
+    raw_dataset_train = tf.data.TFRecordDataset(train_records, num_parallel_reads=10)
+    res, path_len = get_data_shape(raw_dataset_train)
 
-    raw_dataset_val = tf.data.TFRecordDataset(val_records)
-    ds_val = raw_dataset_val.map(utils.decode_example).shuffle(5*batch_size).repeat()
-    ds_val = ds_val.batch(batch_size, drop_remainder=True)
+    ds_train = raw_dataset_train.prefetch(tf.data.AUTOTUNE)
+    ds_train = raw_dataset_train.map(decode_example, num_parallel_calls=tf.data.AUTOTUNE)
+    ds_train = ds_train.cache().shuffle(5*batch_size).batch(batch_size, drop_remainder=True)
+
+    raw_dataset_val = tf.data.TFRecordDataset(val_records, num_parallel_reads=10)
+    ds_val = raw_dataset_train.prefetch(tf.data.AUTOTUNE)
+    ds_val = raw_dataset_val.map(decode_example, num_parallel_calls=tf.data.AUTOTUNE)
+    ds_val = ds_val.cache().shuffle(5*batch_size).batch(batch_size, drop_remainder=True)
 
     ## Define model
     preprocess_layers = [
@@ -35,6 +63,7 @@ def do_train(train_records:Iterable[str], val_records:Iterable[str], output_dir:
 
     grouped_convolutional_layers = [
         [
+            tf.keras.layers.MaxPooling2D(pool_size=(3, 3)),
             tf.keras.layers.Flatten(name='bypass'),
         ],
         # [
@@ -50,10 +79,9 @@ def do_train(train_records:Iterable[str], val_records:Iterable[str], output_dir:
     ]
 
     hidden_layers = [
-        tf.keras.layers.Dense(n_pins*n_cons//2+1, name='dense_relu_1', activation='relu'),
-            # kernel_regularizer=tf.keras.regularizers.l2(0.001)),
-        tf.keras.layers.Dense(n_pins*n_cons, name='wide_linear'),
-        tf.keras.layers.Reshape((1, n_pins, n_cons)),
+        tf.keras.layers.Dense(path_len, name='dense_relu_1', activation='relu'),
+        tf.keras.layers.Dense(path_len, name='dense_relu_2', activation='relu'),
+        tf.keras.layers.Reshape((1, path_len)),
     ]
 
     grouped_postprocess_layers = [
@@ -63,7 +91,7 @@ def do_train(train_records:Iterable[str], val_records:Iterable[str], output_dir:
 
     ## Assemble model
     if model_name is None:
-        model_name = f"r{res}_k{n_pins}_c{n_cons}_b{batch_size}_{loss_function}_{optimizer}{learning_rate:.02e}"
+        model_name = f"b{batch_size}_{loss_function}_{optimizer}{learning_rate:.02e}"
 
     if use_mixed_precision:
         model_name += '_f16'
@@ -117,24 +145,25 @@ def do_train(train_records:Iterable[str], val_records:Iterable[str], output_dir:
     else:
         opt = optimizer
 
-    if weighted_loss:
-        xw = tf.stack([tf.range(0,n_cons,dtype=tf.float32) for _ in range(n_pins)])
-        yw = tf.stack([tf.range(0,n_cons,dtype=tf.float32) for _ in range(n_pins)])
-        loss_weights = 1.0 / (1.0 + (1.0/n_cons)*tf.stack([xw, yw]))
-        loss_norm = 2 * n_cons * n_pins / tf.reduce_sum(loss_weights)
-        loss_weights = loss_norm * loss_weights
-        # Regularization fails unless loss_weights is a list. See
-        # https://stackoverflow.com/questions/65970626/regularizer-causes-valueerror-shapes-must-be-equal-rank
-        loss_weights= loss_weights.numpy().tolist()
-    else:
-        loss_weights = None
+    # if weighted_loss:
+    #     xw = tf.stack([tf.range(0,n_cons,dtype=tf.float32) for _ in range(n_pins)])
+    #     yw = tf.stack([tf.range(0,n_cons,dtype=tf.float32) for _ in range(n_pins)])
+    #     loss_weights = 1.0 / (1.0 + (1.0/n_cons)*tf.stack([xw, yw]))
+    #     loss_norm = 2 * n_cons * n_pins / tf.reduce_sum(loss_weights)
+    #     loss_weights = loss_norm * loss_weights
+    #     # Regularization fails unless loss_weights is a list. See
+    #     # https://stackoverflow.com/questions/65970626/regularizer-causes-valueerror-shapes-must-be-equal-rank
+    #     loss_weights= loss_weights.numpy().tolist()
+    # else:
+    #     loss_weights = None
+    loss_weights = None
 
     model.compile(optimizer=opt, loss=loss_function, loss_weights=loss_weights)
 
     ## Train model
     timestamp = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
 
-    checkpoint_freq = train_steps_per_epoch*checkpoint_period
+    checkpoint_freq = 'epoch' if train_steps_per_epoch is None else train_steps_per_epoch*checkpoint_period
     callbacks = [
         tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=patience, restore_best_weights=True),
         tf.keras.callbacks.TerminateOnNaN(),

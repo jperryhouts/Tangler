@@ -1,5 +1,5 @@
 import itertools
-from typing import Tuple, Any
+from typing import Tuple, Any, Iterable
 import numpy as np
 import tensorflow as tf
 
@@ -31,7 +31,10 @@ def load_img(src: str, res: int) -> np.array:
         cx, cy = (img.size[0]//2, img.size[1]//2)
         size2 = min(img.size)//2
         crop = (cx-size2, cy-size2, cx+size2, cy+size2)
-    img = img.resize((res, res), box=crop)
+
+    if (img.size[0] != res) or (crop is not None):
+        img = img.resize((res, res), box=crop)
+
     return np.array(img)
 
 def encode_example(image:np.ndarray, target:np.ndarray) -> tf.train.Example:
@@ -53,7 +56,6 @@ def encode_example(image:np.ndarray, target:np.ndarray) -> tf.train.Example:
 @tf.function
 def decode_example(serialized:tf.Tensor) -> Tuple[tf.Tensor, tf.Tensor]:
     example = tf.io.parse_single_example(serialized, {
-            'image/res': tf.io.FixedLenFeature([], tf.int64, default_value=0),
             'image/encoded': tf.io.FixedLenFeature([], tf.string, default_value=''),
             'target/rows': tf.io.FixedLenFeature([], tf.int64, default_value=0),
             'target/cols': tf.io.FixedLenFeature([], tf.int64, default_value=0),
@@ -61,19 +63,18 @@ def decode_example(serialized:tf.Tensor) -> Tuple[tf.Tensor, tf.Tensor]:
         })
 
     res = example['image/res']
-    image_raw = tf.io.parse_tensor(example['image/encoded'], tf.string)
-    image = tf.image.decode_jpeg(image_raw)
+    image = tf.image.decode_jpeg(example['image/encoded'])
+    image = tf.cast(image, tf.float32)
     input_data = tf.reshape(image, (res, res, 1))
 
     n_pins = example['target/rows']
     n_cols = example['target/cols']
     target = tf.io.parse_tensor(example['target/value'], tf.float32)
     target_data = tf.reshape(target, (2, n_pins, n_cols))
-    #target_data = target_data[:,:,:n_cols//4]
 
-    return [input_data, target_data]
+    return (input_data, target_data)
 
-def pin_path_to_target(path:np.ndarray, n_pins:int, n_cons:int) -> np.ndarray:
+def pin_path_to_target(path:Iterable, n_pins:int, n_cons:int) -> np.ndarray:
     path = path.astype(np.int)
     res = [set() for _ in range(n_pins)]
 
@@ -216,7 +217,11 @@ class ImageIterator():
             self.source = self.cam.img_stream()
         else:
             self.type = 'files'
-            self.source = itertools.cycle(source) if infinite else itertools.chain(source)
+            self.paths = itertools.cycle(source) if infinite else itertools.chain(source)
+            def gen():
+                for path in self.paths:
+                    yield load_img(path, res)
+            self.source = gen()
 
     def close(self) -> None:
         print("Closing ImageIterator")
