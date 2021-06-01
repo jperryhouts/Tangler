@@ -73,9 +73,13 @@ if __name__ == "__main__":
     elif args.mode == "train":
         from train import do_train
 
-        train_records = glob.glob(os.path.join(args.train_data, '*.tfrecord'))[:5]
-        val_records = glob.glob(os.path.join(args.val_data, '*.tfrecord'))[-5:]
-        print(train_records, val_records)
+        train_records = glob.glob(os.path.join(args.train_data, '*.tfrecord'))
+        val_records = glob.glob(os.path.join(args.val_data, '*.tfrecord'))
+
+        if args.debug:
+            train_records = train_records[:1]
+            val_records = val_records[-1:]
+
         #train_records = [f's3://storage-9iudgkuqwurq6/tangler/tfrecords/train/tangle_{i:05d}-of-00016.tfrecord' for i in range(16)]
         #val_records = [f's3://storage-9iudgkuqwurq6/tangler/tfrecords/val/tangle_{i:05d}-of-00016.tfrecord' for i in range(16)]
 
