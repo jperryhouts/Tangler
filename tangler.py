@@ -28,7 +28,7 @@ if __name__ == "__main__":
     train_parser.add_argument('--learning-rate', '-lr', type=float, default=1e-4)
     train_parser.add_argument('--loss', type=str, default='mse')
     train_parser.add_argument('--cache', action='store_true')
-    train_parser.add_argument('--visualize', action='store_true')
+    train_parser.add_argument('--vis', action='store_true')
     train_parser.add_argument('--mixed-precision', action='store_true')
     train_parser.add_argument('--batch', '-b', type=int, default=100)
     train_parser.add_argument('--epochs', '-e', type=int, default=100)
@@ -87,7 +87,7 @@ if __name__ == "__main__":
         do_train(train_records, val_records, args.output, model_name=args.name,
             checkpoint_path=args.checkpoint_path, checkpoint_period=args.checkpoint_period,
             loss_function=args.loss, optimizer=args.optimizer, learning_rate=args.learning_rate,
-            data_cache=args.cache, vis_model=args.visualize, batch_size=args.batch,
+            data_cache=args.cache, vis_model=args.vis, batch_size=args.batch,
             epochs=args.epochs, patience=args.patience, use_mixed_precision=args.mixed_precision,
             train_steps_per_epoch=args.train_steps_per_epoch, val_steps=args.val_steps)
 

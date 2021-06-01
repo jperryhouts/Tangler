@@ -3,25 +3,31 @@ from typing import Iterable, Tuple
 import math
 import tensorflow as tf
 
+_PATH_LEN = 3000
+_SCALE = 2
+
 _FEATURES = {
     'image/encoded': tf.io.FixedLenFeature([], tf.string, default_value=''),
     'image/name': tf.io.FixedLenFeature([], tf.string, default_value=''),
     'image/format': tf.io.FixedLenFeature([], tf.string, default_value=b'jpeg'),
     'image/res': tf.io.FixedLenFeature([], tf.int64, default_value=300),
     'target/sequence': tf.io.FixedLenFeature([], tf.string),
-    'target/length': tf.io.FixedLenFeature([], tf.int64, default_value=6001),
+    'target/length': tf.io.FixedLenFeature([], tf.int64, default_value=_PATH_LEN),
 }
 
 @tf.function
 def decode_example(serialized:tf.Tensor) -> Tuple[tf.Tensor,tf.Tensor]:
     example = tf.io.parse_single_example(serialized, _FEATURES)
 
-    res = example['image/res']
-    img_decoded = tf.image.decode_jpeg(example['image/encoded'])
-    img = tf.reshape(img_decoded, (res, res, 1))
+    res = example['image/res']//_SCALE
+    img = tf.image.decode_jpeg(example['image/encoded'], ratio=_SCALE)
+    #img = tf.cast(img, tf.float32)
+    img = tf.reshape(img, (res, res, 1))
 
     target = tf.io.parse_tensor(example['target/sequence'], tf.uint8)
-    target = 2*math.pi*tf.cast(target, tf.float32)/256
+    target = tf.cast(target[:_PATH_LEN], tf.float32)
+    target += tf.random.normal((_PATH_LEN,), mean=0.0, stddev=0.5)
+    target = 2*math.pi*target/256
     target = tf.stack([tf.math.sin(target), tf.math.cos(target)], axis=0)
 
     return (img, target)
@@ -29,7 +35,8 @@ def decode_example(serialized:tf.Tensor) -> Tuple[tf.Tensor,tf.Tensor]:
 def get_data_shape(ds):
     def get_length(serialized:tf.Tensor) -> Tuple[int,int]:
         example = tf.io.parse_single_example(serialized, _FEATURES)
-        return (example['image/res'], example['target/length'])
+        #return (example['image/res'], example['target/length'])
+        return (example['image/res']//_SCALE, _PATH_LEN)
     res, length = ds.take(1).map(get_length).as_numpy_iterator().next()
     return (res, length)
 
@@ -63,24 +70,27 @@ def do_train(train_records:Iterable[str], val_records:Iterable[str], output_dir:
 
     ## Define model
     preprocess_layers = [
-        tf.keras.layers.experimental.preprocessing.Rescaling(-1./255, offset=1.0, name='scale_invert'),
+        tf.keras.layers.experimental.preprocessing.Rescaling(-2*math.pi/255, offset=math.pi, name='scale_invert'),
+        #tf.keras.layers.MaxPooling2D(pool_size=(2, 2)),
     ]
 
     grouped_convolutional_layers = [
         [
-            tf.keras.layers.MaxPooling2D(pool_size=(3, 3)),
             tf.keras.layers.Flatten(name='bypass'),
         ],
         [
-            tf.keras.layers.Conv2D(50, 5, padding='valid'),
-            tf.keras.layers.MaxPooling2D(pool_size=(5, 5)),
-            tf.keras.layers.Flatten(name='conv_50'),
+            tf.keras.layers.Conv2D(30, 3, padding='valid'),
+            tf.keras.layers.MaxPooling2D(pool_size=(4, 4)),
+            tf.keras.layers.Flatten(name='conv_30'),
         ],
     ]
 
     hidden_layers = [
-        tf.keras.layers.Dense(path_len, name='dense_relu_1', activation='relu',
-            kernel_regularizer=tf.keras.regularizers.l2(l2=0.01)),
+        #tf.keras.layers.Dense(path_len, name='dense_relu_1'),
+        #tf.keras.layers.LeakyReLU(),
+            #kernel_regularizer=tf.keras.regularizers.l1(l1=0.001)),
+        tf.keras.layers.Dense(path_len, name='dense_linear_1'),
+            #kernel_regularizer=tf.keras.regularizers.l2(l2=0.001)),
         tf.keras.layers.Reshape((1, path_len)),
     ]
 

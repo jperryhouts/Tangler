@@ -178,6 +178,19 @@ class TangledModel(tf.keras.Model):
         path = theta_matrix_to_pin_path(thetas, self.n_pins, self.max_path_len)
         return path
 
+class FlatModel(tf.keras.Model):
+    def __init__(self, model_path:str, n_pins:int=256) -> None:
+        base_model = tf.keras.models.load_model(model_path)
+        super().__init__(base_model.input, base_model.layers[-4].output)
+        self.res = self.input.type_spec.shape[1]
+        self.path_len = self.output.type_spec.shape[-1]
+        self.n_pins = n_pins
+
+    def predict(self, inputs:np.ndarray) -> np.ndarray:
+        img = inputs.astype(np.float32).reshape((1,self.res,self.res,1))
+        thetas = super().predict(img)[0][0]
+        return thetas
+
 class Camera():
     def __init__(self, model_res:int, capture_source:Any=0):
         self.camera = cv2.VideoCapture(capture_source)
