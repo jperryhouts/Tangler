@@ -36,25 +36,30 @@ def get_data_shape(ds):
 def do_train(train_records:Iterable[str], val_records:Iterable[str], output_dir:str,
             model_name:str=None, checkpoint_path:str='/tmp/latest.tf', checkpoint_period:int=1,
             loss_function:str='mse', optimizer:str='adam', learning_rate:float=1e-3,
-            weighted_loss:bool=False, batch_size:int=100, use_mixed_precision:bool=False,
-            epochs:int=1, patience:int=30, train_steps_per_epoch:int=None, val_steps:int=None) -> None:
+            batch_size:int=100, use_mixed_precision:bool=False,
+            epochs:int=1, patience:int=30, train_steps_per_epoch:int=None, val_steps:int=None,
+            data_cache:bool=False, vis_model:bool=False) -> None:
     tf.random.set_seed(42)
 
     if use_mixed_precision:
         tf.keras.mixed_precision.set_global_policy("mixed_float16")
 
     ## Load data
-    raw_dataset_train = tf.data.TFRecordDataset(train_records, num_parallel_reads=10)
+    raw_dataset_train = tf.data.TFRecordDataset(train_records, num_parallel_reads=8)
     res, path_len = get_data_shape(raw_dataset_train)
 
     ds_train = raw_dataset_train.prefetch(tf.data.AUTOTUNE)
     ds_train = raw_dataset_train.map(decode_example, num_parallel_calls=tf.data.AUTOTUNE)
-    ds_train = ds_train.cache().shuffle(5*batch_size).batch(batch_size, drop_remainder=True)
+    if data_cache:
+        ds_train = ds_train.cache()
+    ds_train = ds_train.shuffle(5*batch_size, seed=42).batch(batch_size)
 
-    raw_dataset_val = tf.data.TFRecordDataset(val_records, num_parallel_reads=10)
+    raw_dataset_val = tf.data.TFRecordDataset(val_records, num_parallel_reads=8)
     ds_val = raw_dataset_train.prefetch(tf.data.AUTOTUNE)
     ds_val = raw_dataset_val.map(decode_example, num_parallel_calls=tf.data.AUTOTUNE)
-    ds_val = ds_val.cache().shuffle(5*batch_size).batch(batch_size, drop_remainder=True)
+    if data_cache:
+        ds_val = ds_val.cache()
+    ds_val = ds_val.batch(batch_size)
 
     ## Define model
     preprocess_layers = [
@@ -66,21 +71,16 @@ def do_train(train_records:Iterable[str], val_records:Iterable[str], output_dir:
             tf.keras.layers.MaxPooling2D(pool_size=(3, 3)),
             tf.keras.layers.Flatten(name='bypass'),
         ],
-        # [
-        #     tf.keras.layers.Conv2D(15, 3, padding='valid'),
-        #     tf.keras.layers.MaxPooling2D(pool_size=(5, 5)),
-        #     tf.keras.layers.Flatten(name='conv_15'),
-        # ],
-        # [
-        #     tf.keras.layers.Conv2D(30, 5, padding='valid'),
-        #     tf.keras.layers.MaxPooling2D(pool_size=(5, 5)),
-        #     tf.keras.layers.Flatten(name='conv_30'),
-        # ],
+        [
+            tf.keras.layers.Conv2D(50, 5, padding='valid'),
+            tf.keras.layers.MaxPooling2D(pool_size=(5, 5)),
+            tf.keras.layers.Flatten(name='conv_50'),
+        ],
     ]
 
     hidden_layers = [
-        tf.keras.layers.Dense(path_len, name='dense_relu_1', activation='relu'),
-        tf.keras.layers.Dense(path_len, name='dense_relu_2', activation='relu'),
+        tf.keras.layers.Dense(path_len, name='dense_relu_1', activation='relu',
+            kernel_regularizer=tf.keras.regularizers.l2(l2=0.01)),
         tf.keras.layers.Reshape((1, path_len)),
     ]
 
@@ -145,33 +145,22 @@ def do_train(train_records:Iterable[str], val_records:Iterable[str], output_dir:
     else:
         opt = optimizer
 
-    # if weighted_loss:
-    #     xw = tf.stack([tf.range(0,n_cons,dtype=tf.float32) for _ in range(n_pins)])
-    #     yw = tf.stack([tf.range(0,n_cons,dtype=tf.float32) for _ in range(n_pins)])
-    #     loss_weights = 1.0 / (1.0 + (1.0/n_cons)*tf.stack([xw, yw]))
-    #     loss_norm = 2 * n_cons * n_pins / tf.reduce_sum(loss_weights)
-    #     loss_weights = loss_norm * loss_weights
-    #     # Regularization fails unless loss_weights is a list. See
-    #     # https://stackoverflow.com/questions/65970626/regularizer-causes-valueerror-shapes-must-be-equal-rank
-    #     loss_weights= loss_weights.numpy().tolist()
-    # else:
-    #     loss_weights = None
-    loss_weights = None
-
-    model.compile(optimizer=opt, loss=loss_function, loss_weights=loss_weights)
+    model.compile(optimizer=opt, loss=loss_function)
 
     ## Train model
     timestamp = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
 
+    log_dir = os.path.join(output_dir, 'logs', f'{timestamp}_{model_name}')
     checkpoint_freq = 'epoch' if train_steps_per_epoch is None else train_steps_per_epoch*checkpoint_period
     callbacks = [
         tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=patience, restore_best_weights=True),
         tf.keras.callbacks.TerminateOnNaN(),
         tf.keras.callbacks.ModelCheckpoint(filepath=checkpoint_path, monitor='val_loss', save_freq=checkpoint_freq),
-        tf.keras.callbacks.TensorBoard(log_dir=os.path.join(output_dir, 'logs', f'{timestamp}_{model_name}'))]
+        tf.keras.callbacks.TensorBoard(log_dir=log_dir, update_freq=500)]
 
     save_path = os.path.join(output_dir, 'models', f'{timestamp}_{model_name}')
-    tf.keras.utils.plot_model(model, to_file=save_path+'.png', show_shapes=True)
+    if vis_model:
+        tf.keras.utils.plot_model(model, to_file=save_path+'.png', show_shapes=True)
     print(model.summary())
 
     model.fit(ds_train, validation_data=ds_val, callbacks=callbacks, batch_size=batch_size, epochs=epochs,
