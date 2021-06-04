@@ -161,21 +161,39 @@ class CustomTensorBoard(tf.keras.callbacks.TensorBoard):
         super().on_epoch_end(epoch, logs)
 
 class TangledModel(tf.keras.Model):
-    def __init__(self, model_path:str, max_path_len:int=int(200e3)) -> None:
-        self.max_path_len = max_path_len
-        base_model = tf.keras.models.load_model(model_path)
+    def __init__(self, model_path:str) -> None:
+        base_model = tf.keras.models.load_model(model_path, custom_objects={
+            'sin': tf.math.sin,
+            'cos': tf.math.cos,
+        })
         super().__init__(base_model.input, base_model.layers[-4].output)
         self.res = self.input.type_spec.shape[1]
-        self.n_pins = self.output.type_spec.shape[2]
+        self.n_pins = self.output.type_spec.shape[-2]
+        self.n_cols = self.output.type_spec.shape[-1]
+        self.path_len = self.n_pins * (2 * self.n_cols + 1)
+        print(self.res, self.n_pins, self.n_cols)
 
     def predict(self, inputs:np.ndarray) -> np.ndarray:
-        img = inputs.astype(np.float32).reshape((1,self.res,self.res,1))
+        img = inputs.astype(np.uint8).reshape((1,self.res,self.res,1))
         thetas = super().predict(img)[0][0]
         return thetas
 
     def predict_convert(self, inputs:np.ndarray) -> np.ndarray:
         thetas = self.predict(inputs)
-        path = theta_matrix_to_pin_path(thetas, self.n_pins, self.max_path_len)
+        ppins = np.round(self.n_pins*thetas/(2*np.pi)) #.astype(np.int)
+
+        # ppins += np.arange(self.n_pins).reshape((self.n_pins,1))
+        # ppins = ppins%self.n_pins
+
+        path = np.zeros(self.path_len)
+        idx = 0
+        for A in range(self.n_pins):
+            path[idx] = A
+            idx += 1
+            for B in ppins[int(A)]:
+                path[idx] = B
+                path[idx+1] = A
+                idx += 2
         return path
 
 class FlatModel(tf.keras.Model):
@@ -196,6 +214,7 @@ class Camera():
         self.camera = cv2.VideoCapture(capture_source)
         self.load_crop_dimensions()
         self.model_res = model_res
+        self.load_cmask()
 
     def close(self):
         print('Releasing camera')
@@ -212,6 +231,13 @@ class Camera():
             self.y0, self.x0 = (hc-imres//2, wc-imres//2)
             self.y1, self.x1 = (hc+imres//2, wc+imres//2)
 
+    def load_cmask(self):
+        res = self.model_res
+        X,Y = np.mgrid[-1:1:res*1j,-1:1:res*1j]
+        R2 = X**2+Y**2
+        self.cmask = (1*(R2<1.0)).astype(np.uint8)
+        self.cmask_inv = 1-self.cmask
+
     def img_stream(self):
         while self.camera.isOpened():
             success, frame = self.camera.read()
@@ -220,17 +246,19 @@ class Camera():
                 img = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
                 img = img[self.y0:self.y1,self.x0:self.x1]
                 img = cv2.resize(img, (self.model_res, self.model_res))
+                img *= self.cmask
+                img += 127*self.cmask_inv
                 yield img
 
 class ImageIterator():
-    def __init__(self, source:Any, infinite:bool, res:int) -> None:
+    def __init__(self, source:Any, cycle:bool, res:int) -> None:
         if source == 'webcam':
             self.type = 'webcam'
             self.cam = Camera(res)
             self.source = self.cam.img_stream()
         else:
             self.type = 'files'
-            self.paths = itertools.cycle(source) if infinite else itertools.chain(source)
+            self.paths = itertools.cycle(source) if cycle else itertools.chain(source)
             def gen():
                 for path in self.paths:
                     yield load_img(path, res)

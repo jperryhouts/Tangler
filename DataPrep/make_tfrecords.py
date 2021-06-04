@@ -8,6 +8,9 @@ from typing import Iterable
 import numpy as np
 import tensorflow as tf
 
+_N_CONS = 30
+_N_PINS = 256
+
 def _int_to_feature(value: int) -> tf.train.Feature:
     int64_list = tf.train.Int64List(value=[value])
     return tf.train.Feature(int64_list=int64_list)
@@ -20,7 +23,32 @@ def _tensor_to_feature(tensor: tf.Tensor) -> tf.train.Feature:
 def _bytes_to_feature(values:str) -> tf.train.Feature:
     return tf.train.Feature(bytes_list=tf.train.BytesList(value=[values]))
 
-def files_to_example(base_path:str, n_pins:int=256) -> tf.train.Example:
+def pin_path_to_target(path:Iterable) -> np.ndarray:
+    path = path.astype(np.int)
+    sets = [set() for _ in range(_N_PINS)]
+
+    for i in range(len(path)-1):
+        a, b = path[i:i+2]
+
+        if (b-a < _N_PINS//2):
+            if len(sets[a]) < _N_CONS:
+                sets[a].add(b)
+        else:
+            if len(sets[b]) < _N_CONS:
+                sets[b].add(a)
+
+    target = []
+    for p in range(_N_PINS):
+        #s = list(sets[p])
+        s_p = np.array(list(sets[p]))
+        s = sorted((s_p-p)%_N_PINS, reverse=True)
+        while len(s) < _N_CONS:
+            s.append(p)
+        target.append(s)
+
+    return np.array(target).astype(np.uint8)
+
+def files_to_example(base_path:str) -> tf.train.Example:
     image_path = f"{base_path}.jpg"
     target_path = f"{base_path}.raveled"
 
@@ -28,7 +56,7 @@ def files_to_example(base_path:str, n_pins:int=256) -> tf.train.Example:
     if raveled is None or len(raveled) == 0:
         print(f">> Unable to load raveled sequence <{target_path}>")
         return None
-    if raveled.min() < 0 or raveled.max() >= n_pins:
+    if raveled.min() < 0 or raveled.max() >= _N_PINS:
         print(f">> Value out of bounds in raveled sequence <{target_path}>")
         return None
 
@@ -37,15 +65,17 @@ def files_to_example(base_path:str, n_pins:int=256) -> tf.train.Example:
     assert image_shape[0] == image_shape[1], f'Invalid image shape: {image_shape}'
     image_res = image_shape[0]
 
-    target = tf.convert_to_tensor(raveled.astype(np.uint8), tf.uint8)
+    target = pin_path_to_target(raveled)
+    target = tf.convert_to_tensor(target, tf.uint8)
 
     return tf.train.Example(features=tf.train.Features(feature={
         'image/encoded': _bytes_to_feature(image_data),
         'image/name': _bytes_to_feature(base_path.encode('utf-8')),
         'image/format': _bytes_to_feature(b'jpeg'),
         'image/res': _int_to_feature(image_res),
-        'target/sequence': _tensor_to_feature(target),
-        'target/length': _int_to_feature(raveled.size)
+        'target': _tensor_to_feature(target),
+        'target/n_pins': _int_to_feature(_N_PINS),
+        'target/n_cons': _int_to_feature(_N_CONS),
     }))
 
 class Shard():

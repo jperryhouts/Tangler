@@ -6,24 +6,25 @@ from OpenGL.GL.shaders import compileProgram, compileShader
 
 import utils
 
-def do_demo(model_path, data_source):
-    model = utils.FlatModel(model_path)
-    image_source = utils.ImageIterator(data_source, True, model.res)
+def do_demo(model_path:str, data_source,
+            mirror:bool=False, cycle:bool=True, delay:int=0) -> None:
+    model = utils.TangledModel(model_path)
+    image_source = utils.ImageIterator(data_source, cycle, model.res)
 
-    vertex_src = '''
-    in float theta;
-    void main() {
-        // float PI = 3.1415926535897932384626433832795;
-        // float n_pins = ''' + str(model.n_pins) + ''';
-        // float theta = 2.0 * PI * pin.x / n_pins;
+    vertex_src = f'''
+    in float pin;
+    void main() {{
+        float PI = 3.1415926535897932384626433832795;
+        float n_pins = {model.n_pins};
+        float theta = 2.0 * PI * pin.x / n_pins;
         float x = sin(theta), y = cos(theta);
-        gl_Position = vec4(x, y, 0.0, 1.0);
-    }
+        gl_Position = vec4({'-x' if mirror else 'x'}, -y, 0.0, 1.0);
+    }}
     '''
 
     fragment_src = '''
     void main() {
-        gl_FragColor = vec4(0.0, 0.0, 0.0, 0.1);
+        gl_FragColor = vec4(0.0, 0.0, 0.0, 0.05);
     }
     '''
 
@@ -49,7 +50,7 @@ def do_demo(model_path, data_source):
     glBindBuffer(GL_ARRAY_BUFFER, VBO)
     glBufferData(GL_ARRAY_BUFFER, thetas.nbytes, thetas, GL_DYNAMIC_DRAW)
 
-    buffer_loc = glGetAttribLocation(shader, "theta")
+    buffer_loc = glGetAttribLocation(shader, "pin")
     glEnableVertexAttribArray(buffer_loc)
     glVertexAttribPointer(buffer_loc, 1, GL_FLOAT, GL_FALSE, 0, ctypes.c_void_p(0))
 
@@ -62,7 +63,7 @@ def do_demo(model_path, data_source):
         glfw.poll_events()
 
         img = image_source.__next__()
-        thetas[:] = model.predict(img).astype(np.float32)
+        thetas[:] = model.predict_convert(img).astype(np.float32)
 
         glClear(GL_COLOR_BUFFER_BIT)
         glBufferData(GL_ARRAY_BUFFER, thetas.nbytes, thetas, GL_DYNAMIC_COPY)
@@ -70,8 +71,8 @@ def do_demo(model_path, data_source):
 
         glfw.swap_buffers(window)
 
-        if image_source.type == 'files':
-            time.sleep(0.1)
+        if delay > 0:
+            time.sleep(delay/1000.0)
 
     image_source.close()
     glfw.terminate()
