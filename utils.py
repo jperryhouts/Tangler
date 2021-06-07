@@ -2,6 +2,7 @@ import itertools
 from typing import Tuple, Any, Iterable
 import numpy as np
 import tensorflow as tf
+import matplotlib.pyplot as plt
 
 try:
     from PIL import Image, ImageOps
@@ -166,24 +167,39 @@ class TangledModel(tf.keras.Model):
             'sin': tf.math.sin,
             'cos': tf.math.cos,
         })
-        super().__init__(base_model.input, base_model.layers[-4].output)
+        # super().__init__(base_model.input, base_model.layers[-4].output)
+        super().__init__(base_model.input, base_model.output)
         self.res = self.input.type_spec.shape[1]
         self.n_pins = self.output.type_spec.shape[-2]
         self.n_cols = self.output.type_spec.shape[-1]
         self.path_len = self.n_pins * (2 * self.n_cols + 1)
         print(self.res, self.n_pins, self.n_cols)
+        self.prediction_num = 0
 
     def predict(self, inputs:np.ndarray) -> np.ndarray:
-        img = inputs.astype(np.uint8).reshape((1,self.res,self.res,1))
-        thetas = super().predict(img)[0][0]
-        return thetas
+        img = inputs.reshape((1,self.res,self.res,1))
+        result = super().predict(img.astype(np.uint8)).astype(np.float)
+
+        ppins = np.round(self.n_pins * result[0])
+        # ppins = np.round(self.n_pins*result[0][0]/(2*np.pi))
+        ppins += np.arange(self.n_pins).reshape((self.n_pins,1))
+
+        self.prediction_num += 1
+        if self.prediction_num == 100:
+            print(result.shape, result.dtype, ppins.shape, ppins.dtype)
+            _, ax = plt.subplots(1,3)
+            ax[0].imshow(result[0], aspect='auto', cmap=plt.cm.magma, interpolation='nearest')
+            ax[1].imshow(ppins, aspect='auto', cmap=plt.cm.magma, interpolation='nearest')
+            ax[2].imshow(ppins%self.n_pins, aspect='auto', cmap=plt.cm.magma, interpolation='nearest')
+            #plt.colorbar()
+            plt.show()
+
+        return ppins
 
     def predict_convert(self, inputs:np.ndarray) -> np.ndarray:
-        thetas = self.predict(inputs)
-        ppins = np.round(self.n_pins*thetas/(2*np.pi)) #.astype(np.int)
+        ppins = self.predict(inputs)
 
-        # ppins += np.arange(self.n_pins).reshape((self.n_pins,1))
-        # ppins = ppins%self.n_pins
+        ppins = ppins%self.n_pins
 
         path = np.zeros(self.path_len)
         idx = 0

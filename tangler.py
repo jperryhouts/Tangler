@@ -30,11 +30,12 @@ if __name__ == "__main__":
     train_parser.add_argument('--loss', type=str, default='mse', help='Loss function for optimizer. Default: mse')
     train_parser.add_argument('--cache', action='store_true', help='Cache examples in RAM. Default: false')
     train_parser.add_argument('--vis', action='store_true', help='Generate a graphical representation of the model architecture. Saves to `output_dir/models/{...}.png`')
+    train_parser.add_argument('--dry-run', action='store_true', help='Compile and summarize model, then exit')
     train_parser.add_argument('--format', type=str, default='h5', choices=['h5', 'tf'], help='Format to save model. Default: h5')
     train_parser.add_argument('--fp16', action='store_true', help='Use mixed precision fp16/fp32 training mode. Default: false')
     train_parser.add_argument('--batch', '-b', type=int, default=100, help='Number of examples per batch. Default: 100')
     train_parser.add_argument('--epochs', '-e', type=int, default=100, help='How many epochs to run before terminating. Default: 100')
-    train_parser.add_argument('--patience', type=int, default=30, help='Terminate early if validation loss does not improve in this many epochs. Default: 30')
+    train_parser.add_argument('--patience', type=int, default=1, help='Terminate early if validation loss does not improve in this many epochs. Default: 1')
     train_parser.add_argument('--train-steps', '-ts', type=int, help='How many batches of training data to process per epoch. Default: all of them')
     train_parser.add_argument('--val-steps', '-vs', type=int, help='How many batches to run on validation data. Default: all of them')
     train_parser.add_argument('--checkpoint-period', type=int, default=1, help='Epochs between checkpoint outpubs. Ignored if --train-steps-per-epoch is not specified. Default: 1')
@@ -51,12 +52,12 @@ if __name__ == "__main__":
     predict_parser.add_argument('fname', nargs='+', help='Image(s) to convert into thread pattern')
 
     demo_parser = subparsers.add_parser("demo", help='Run inferences in demonstration mode')
-    demo_parser.add_argument('--source', default='webcam', choices=['webcam', 'files'], help='Inference source. If "files" source is selected, then the --input option must be specified. Default: webcam')
-    demo_parser.add_argument('--input', nargs='+', help='Images or directories containing images for inferencing. Ignored unless `--source files` is specified')
+    demo_parser.add_argument('--source', '-s', default='webcam', choices=['webcam', 'files'], help='Inference source. If "files" source is selected, then the --input option must be specified. Default: webcam')
+    demo_parser.add_argument('--input', '-i', nargs='+', help='Images or directories containing images for inferencing. Ignored unless `--source files` is specified')
     demo_parser.add_argument('--cycle', action='store_true', help='Repeat input images indefinitely. Ignored unless --source files is specified. Default: false')
 
-    demo_parser.add_argument('--mirror', action='store_true', help='Flip visualization output Left/Right. Default: false')
-    demo_parser.add_argument('--delay', default=0, type=int, help='Time delay in milliseconds between frames. Default: 0')
+    demo_parser.add_argument('--mirror', '-m', action='store_true', help='Flip visualization output Left/Right. Default: false')
+    demo_parser.add_argument('--delay', '-d', default=0, type=int, help='Time delay in milliseconds between frames. Default: 0')
 
     demo_parser.add_argument('model', help='Saved model path')
 
@@ -82,8 +83,7 @@ if __name__ == "__main__":
 
         assert os.path.isdir(args.train_data)
         assert os.path.isdir(args.val_data)
-        assert os.path.isdir(args.output)
-        for d in ('logs', 'models'):
+        for d in ('', 'logs', 'models'):
             D = os.path.join(args.output, d)
             if not os.path.exists(D):
                 os.makedirs(D)
@@ -104,7 +104,7 @@ if __name__ == "__main__":
             loss_function=args.loss, optimizer=args.optimizer, learning_rate=args.learning_rate,
             data_cache=args.cache, vis_model=args.vis, batch_size=args.batch, save_format=args.format,
             epochs=args.epochs, patience=args.patience, use_mixed_precision=args.fp16,
-            train_steps=args.train_steps, val_steps=args.val_steps)
+            train_steps=args.train_steps, val_steps=args.val_steps, dry_run=args.dry_run)
 
     elif args.mode == "predict":
         from predict import do_predict

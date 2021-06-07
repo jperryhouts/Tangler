@@ -6,10 +6,19 @@ from pathlib import Path
 from multiprocessing import Process
 from typing import Iterable
 import numpy as np
-import tensorflow as tf
 
-_N_CONS = 30
+try:
+    import matplotlib.pyplot as plt
+    plt.style.use('seaborn-talk')
+except Exception as e:
+    pass
+
+import tensorflow as tf
+tf.config.set_visible_devices([], 'GPU')
+
+_N_CONS = 64
 _N_PINS = 256
+_RECORD_FORMAT_VERSION = 3
 
 def _int_to_feature(value: int) -> tf.train.Feature:
     int64_list = tf.train.Int64List(value=[value])
@@ -24,64 +33,100 @@ def _bytes_to_feature(values:str) -> tf.train.Feature:
     return tf.train.Feature(bytes_list=tf.train.BytesList(value=[values]))
 
 def pin_path_to_target(path:Iterable) -> np.ndarray:
+    NC2 = _N_CONS//2
+
     path = path.astype(np.int)
-    sets = [set() for _ in range(_N_PINS)]
+    setA = [set() for _ in range(_N_PINS)]
+    setB = [set() for _ in range(_N_PINS)]
 
     for i in range(len(path)-1):
         a, b = path[i:i+2]
+        if len(setA[a]) < NC2:
+            setA[a].add((b-a)%_N_PINS)
+        if len(setB[b]) < NC2:
+            setB[b].add((a-b)%_N_PINS)
 
-        if (b-a < _N_PINS//2):
-            if len(sets[a]) < _N_CONS:
-                sets[a].add(b)
-        else:
-            if len(sets[b]) < _N_CONS:
-                sets[b].add(a)
-
-    target = []
+    target = np.zeros((_N_PINS, _N_CONS), dtype=np.uint8)
     for p in range(_N_PINS):
-        #s = list(sets[p])
-        s_p = np.array(list(sets[p]))
-        s = sorted((s_p-p)%_N_PINS, reverse=True)
-        while len(s) < _N_CONS:
-            s.append(p)
-        target.append(s)
+        target[p][NC2-len(setA[p]):NC2] = np.array(sorted(setA[p], reverse=False), dtype=np.uint8)
+        target[p][NC2:NC2+len(setB[p])] = np.array(sorted(setB[p], reverse=True), dtype=np.uint8)
 
-    return np.array(target).astype(np.uint8)
+    return target
 
-def files_to_example(base_path:str) -> tf.train.Example:
-    image_path = f"{base_path}.jpg"
-    target_path = f"{base_path}.raveled"
-
-    raveled = np.loadtxt(target_path, dtype=np.int).flatten()
+def load_raveled(path:str) -> np.ndarray:
+    raveled = np.loadtxt(path, dtype=np.int).flatten()
     if raveled is None or len(raveled) == 0:
-        print(f">> Unable to load raveled sequence <{target_path}>")
+        print(f">> Unable to load raveled sequence <{path}>")
         return None
     if raveled.min() < 0 or raveled.max() >= _N_PINS:
-        print(f">> Value out of bounds in raveled sequence <{target_path}>")
+        print(f">> Value out of bounds in raveled sequence <{path}>")
         return None
 
-    image_data = tf.io.gfile.GFile(image_path, 'rb').read()
-    image_shape = tf.image.decode_jpeg(image_data).shape
-    assert image_shape[0] == image_shape[1], f'Invalid image shape: {image_shape}'
-    image_res = image_shape[0]
+    return raveled
+
+def visualize(raveled_path:str) -> None:
+    raveled = load_raveled(raveled_path)
+
+    target = pin_path_to_target(raveled)
+
+    _, ax = plt.subplots(2, 2)
+    target_theta = target.astype(np.float)*2*np.pi/_N_PINS
+    theta = raveled.astype(np.float)*2*np.pi/_N_PINS
+
+    ax[0][0].plot(np.sin(theta), 1-np.cos(theta), 'k-', lw=0.02)
+    p1 = ax[0][1].imshow(target, aspect='auto', cmap=plt.cm.magma, interpolation='nearest')
+    ax[1][0].imshow(np.sin(target_theta), aspect='auto', cmap=plt.cm.seismic, interpolation='nearest', vmin=-1, vmax=1)
+    p2 = ax[1][1].imshow(np.cos(target_theta), aspect='auto', cmap=plt.cm.seismic, interpolation='nearest', vmin=-1, vmax=1)
+
+    plt.colorbar(p1, ax=ax[0][1], label='Connection')
+    plt.colorbar(p2, ax=ax[1][1], label='Position')
+    ax[0][0].set_axis_off()
+    ax[0][1].xaxis.set_visible(False)
+    ax[1][0].xaxis.set_visible(False)
+    ax[1][1].xaxis.set_visible(False)
+    ax[0][1].yaxis.set_visible(False)
+    ax[1][1].yaxis.set_visible(False)
+    ax[0][0].set_aspect(1)
+    ax[1][0].set_ylabel('Pin number')
+    ax[0][1].set_title('Connections')
+    ax[1][0].set_title('X coordinate')
+    ax[1][1].set_title('Y coordinate')
+    plt.show()
+
+def files_to_example(base_path:str, res:int=-1) -> tf.train.Example:
+    raveled = load_raveled(f"{base_path}.raveled")
+    image_data = tf.io.gfile.GFile(f"{base_path}.jpg", 'rb').read()
+
+    image = tf.io.decode_jpeg(image_data)
+
+    if res != -1 and (image.shape[0] != res or image.shape[1] != res):
+        image = tf.image.resize(image, (res, res), tf.image.ResizeMethod.NEAREST_NEIGHBOR)
+        image_data = tf.io.encode_jpeg(image).numpy()
+        image_res = res
+
+    assert image.shape[0] == image.shape[1], f'Invalid image shape: {image.shape}'
+    image_res = image.shape[0]
 
     target = pin_path_to_target(raveled)
     target = tf.convert_to_tensor(target, tf.uint8)
+    target = tf.reshape(target, (_N_PINS, _N_CONS, 1))
+    enc_target = tf.io.encode_jpeg(target, quality=75).numpy()
 
     return tf.train.Example(features=tf.train.Features(feature={
+        'record/version': _int_to_feature(_RECORD_FORMAT_VERSION),
+        'record/name': _bytes_to_feature(base_path.encode('utf-8')),
         'image/encoded': _bytes_to_feature(image_data),
-        'image/name': _bytes_to_feature(base_path.encode('utf-8')),
-        'image/format': _bytes_to_feature(b'jpeg'),
         'image/res': _int_to_feature(image_res),
-        'target': _tensor_to_feature(target),
+        'target/encoded': _bytes_to_feature(enc_target),
         'target/n_pins': _int_to_feature(_N_PINS),
         'target/n_cons': _int_to_feature(_N_CONS),
     }))
 
 class Shard():
-    def __init__(self, path:str) -> None:
+    def __init__(self, path:str, res:int) -> None:
         self.examples = []
         self.path = path
+        self.res = res
         self.basename = os.path.basename(self.path)
 
     def append(self, stem:str):
@@ -91,12 +136,12 @@ class Shard():
         print(f">> Saving shard {self.basename} with {len(self.examples)} records.")
         with tf.io.TFRecordWriter(self.path) as tfrecord_writer:
             for stem in self.examples:
-                example = files_to_example(stem)
+                example = files_to_example(stem, self.res)
                 if example is not None:
                     tfrecord_writer.write(example.SerializeToString())
         print(f">> Completed saving {self.basename}")
 
-def write_records(input_dir:str, output_dir:str, num_shards:int=10, sequential:bool=False) -> None:
+def write_records(input_dir:str, output_dir:str, num_shards:int=10, sequential:bool=False, res:int=-1) -> None:
     assert os.path.isdir(input_dir)
     get_stem = lambda p: os.path.join(p.parent.absolute(), p.stem)
     examples = [get_stem(path) for path in Path(input_dir).rglob('*.jpg')]
@@ -115,7 +160,7 @@ def write_records(input_dir:str, output_dir:str, num_shards:int=10, sequential:b
     shards = []
     for i in range(num_shards):
         tfrecord = f"tangle_{(i+1):05d}-of-{num_shards:05d}.tfrecord"
-        shard = Shard(os.path.join(output_dir, tfrecord))
+        shard = Shard(os.path.join(output_dir, tfrecord), res)
         for stem in examples[i*num_per_shard:(i+1)*num_per_shard]:
             img = f"{stem}.jpg"
             if not os.path.isfile(img):
@@ -129,7 +174,7 @@ def write_records(input_dir:str, output_dir:str, num_shards:int=10, sequential:b
 
         shards.append(shard)
 
-    if sequential:
+    if sequential or len(shards) == 1:
         for shard in shards:
             shard.save()
     else:
@@ -147,8 +192,16 @@ if __name__ == '__main__':
         help="Split dataset into multiple files (default: 10)")
     parser.add_argument('--sequential', action='store_true',
         help='Process tfrecords one at a time (defaults to each tfrecord file in parallel process)')
+    parser.add_argument('--resolution', '-r', type=int, default=-1,
+        help='Resize image to this many pixels per side. Defaults to no resizing')
     parser.add_argument('input', help='Root directory for dataset (e.g. ./train)')
-    parser.add_argument('output', help='Directory in which to save tfrecord files')
+    parser.add_argument('output', help='Directory in which to save tfrecord files. Use "@vis" to just display images.')
     args = parser.parse_args()
 
-    write_records(args.input, args.output, args.num_shards, args.sequential)
+    if args.output == "@vis":
+        targets = list(Path(args.input).rglob('*.raveled'))
+        random.shuffle(targets)
+        for raveled_path in targets:
+            visualize(raveled_path)
+
+    write_records(args.input, args.output, args.num_shards, args.sequential, args.resolution)
