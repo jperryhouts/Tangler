@@ -229,29 +229,29 @@ def do_train(train_data:str, val_data:str, output_dir:str, model_name:str=None,
             num_parallel_calls=tf.data.AUTOTUNE,
             deterministic=False)
 
-    import matplotlib.pyplot as plt
-    for img, target in ds_train.as_numpy_iterator():
-        _, ax = plt.subplots(1, 3, figsize=(14,4))
-        img = img.astype(np.float32)
-        target = target.astype(np.float32)
-        ax[0].imshow(img.reshape((res,res)), aspect=1, cmap=plt.cm.gray, vmin=0, vmax=255)
-        ax[1].imshow((target).reshape((n_pins,n_pins)), aspect=1, cmap=plt.cm.gray_r, interpolation='nearest')
+    # import matplotlib.pyplot as plt
+    # for img, target in ds_train.as_numpy_iterator():
+    #     _, ax = plt.subplots(1, 3, figsize=(14,4))
+    #     img = img.astype(np.float32)
+    #     target = target.astype(np.float32)
+    #     ax[0].imshow(img.reshape((res,res)), aspect=1, cmap=plt.cm.gray, vmin=0, vmax=255)
+    #     ax[1].imshow((target).reshape((n_pins,n_pins)), aspect=1, cmap=plt.cm.gray_r, interpolation='nearest')
 
-        target = np.tril(target)
-        w = np.where(target > 0.5)
-        path = []
-        for i in range(w[0].size):
-            path.append(w[0][i])
-            path.append(w[1][i])
+    #     target = np.tril(target)
+    #     w = np.where(target > 0.5)
+    #     path = []
+    #     for i in range(w[0].size):
+    #         path.append(w[0][i])
+    #         path.append(w[1][i])
 
-        print(len(path))
-        raveled = np.array(path).astype(np.float)
-        theta = raveled*2*np.pi/256
+    #     print(len(path))
+    #     raveled = np.array(path).astype(np.float)
+    #     theta = raveled*2*np.pi/256
 
-        ax[2].plot(np.sin(theta), 1-np.cos(theta), 'k-', lw=0.01)
+    #     ax[2].plot(np.sin(theta), 1-np.cos(theta), 'k-', lw=0.01)
 
-        #plt.colorbar(tp, ax=ax[1])
-        plt.show()
+    #     #plt.colorbar(tp, ax=ax[1])
+    #     plt.show()
 
     ds_train = ds_train.batch(batch_size)
     ds_val = ds_val.batch(batch_size)
