@@ -89,22 +89,17 @@ if __name__ == "__main__":
                 os.makedirs(D)
             assert os.path.isdir(D)
 
-        train_records = glob.glob(os.path.join(args.train_data, '*.tfrecord'))
-        val_records = glob.glob(os.path.join(args.val_data, '*.tfrecord'))
-
-        if args.debug:
-            train_records = train_records[:1]
-            val_records = val_records[-1:]
-
         #train_records = [f's3://storage-9iudgkuqwurq6/tangler/tfrecords/train/tangle_{i:05d}-of-00016.tfrecord' for i in range(16)]
         #val_records = [f's3://storage-9iudgkuqwurq6/tangler/tfrecords/val/tangle_{i:05d}-of-00016.tfrecord' for i in range(16)]
 
-        do_train(train_records, val_records, args.output, model_name=args.name,
+        train_data = str(args.train_data.absolute())
+        val_data = str(args.val_data.absolute())
+        do_train(train_data, val_data, args.output, model_name=args.name,
             checkpoint_path=args.checkpoint, checkpoint_period=args.checkpoint_period,
             loss_function=args.loss, optimizer=args.optimizer, learning_rate=args.learning_rate,
             data_cache=args.cache, vis_model=args.vis, batch_size=args.batch, save_format=args.format,
             epochs=args.epochs, patience=args.patience, use_mixed_precision=args.fp16,
-            train_steps=args.train_steps, val_steps=args.val_steps, dry_run=args.dry_run)
+            train_steps=args.train_steps, val_steps=args.val_steps, dry_run=args.dry_run, debug=args.debug)
 
     elif args.mode == "predict":
         from predict import do_predict

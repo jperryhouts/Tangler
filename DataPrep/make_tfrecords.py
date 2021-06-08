@@ -6,19 +6,23 @@ from pathlib import Path
 from multiprocessing import Process
 from typing import Iterable
 import numpy as np
+from tensorflow.python.framework.error_interpolation import interpolate
 
 try:
     import matplotlib.pyplot as plt
+    import matplotlib.colors as colors
+    import cmocean
+    from PIL import Image
     plt.style.use('seaborn-talk')
 except Exception as e:
-    pass
+    print(e)
 
 import tensorflow as tf
 tf.config.set_visible_devices([], 'GPU')
 
 _N_CONS = 64
 _N_PINS = 256
-_RECORD_FORMAT_VERSION = 3
+_RECORD_FORMAT_VERSION = 6
 
 def _int_to_feature(value: int) -> tf.train.Feature:
     int64_list = tf.train.Int64List(value=[value])
@@ -29,10 +33,27 @@ def _tensor_to_feature(tensor: tf.Tensor) -> tf.train.Feature:
     bytes_list = tf.train.BytesList(value=[serialized.numpy()])
     return tf.train.Feature(bytes_list=bytes_list)
 
+def _sparse_tensor_to_feature(tensor: tf.Tensor) -> tf.train.Feature:
+    serialized = tf.io.serialize_sparse(tensor)
+    bytes_list = tf.train.BytesList(value=serialized.numpy())
+    return tf.train.Feature(bytes_list=bytes_list)
+
 def _bytes_to_feature(values:str) -> tf.train.Feature:
     return tf.train.Feature(bytes_list=tf.train.BytesList(value=[values]))
 
-def pin_path_to_target(path:Iterable) -> np.ndarray:
+def pin_path_to_target_v5(path:Iterable) -> np.ndarray:
+    target = np.zeros((_N_PINS, _N_PINS), dtype=np.uint8)
+    target[path[:-1],path[1:]] = 1
+    target[path[1:],path[:-1]] = 1
+
+    # target = np.zeros((_N_PINS, _N_PINS), dtype=np.uint8)
+    # for i in range(len(path)-1):
+    #     a, b = path[i:i+2]
+    #     target[a][b] += 1
+    #     target[b][a] += 1
+    return target
+
+def pin_path_to_target_v3(path:Iterable) -> np.ndarray:
     NC2 = _N_CONS//2
 
     path = path.astype(np.int)
@@ -64,10 +85,9 @@ def load_raveled(path:str) -> np.ndarray:
 
     return raveled
 
-def visualize(raveled_path:str) -> None:
+def visualize_v3(raveled_path:str) -> None:
     raveled = load_raveled(raveled_path)
-
-    target = pin_path_to_target(raveled)
+    target = pin_path_to_target_v3(raveled)
 
     _, ax = plt.subplots(2, 2)
     target_theta = target.astype(np.float)*2*np.pi/_N_PINS
@@ -93,6 +113,26 @@ def visualize(raveled_path:str) -> None:
     ax[1][1].set_title('Y coordinate')
     plt.show()
 
+def visualize_v5(raveled_path:str) -> None:
+    img_path = str(raveled_path).rsplit('.')[0]+'.jpg'
+    img = Image.open(img_path)
+    img.resize((256,256))
+
+    raveled = load_raveled(raveled_path)
+    target = pin_path_to_target_v5(raveled)
+
+    _, ax = plt.subplots(1,2, figsize=(9.5,4))
+
+    ax[0].imshow(img, cmap=plt.cm.gray, aspect=1)
+    print(target.max())
+    tp = ax[1].imshow(1+target, cmap=plt.cm.magma, aspect=1, interpolation='nearest',
+        norm=colors.LogNorm(vmin=1, vmax=target.max()+1))
+    cbar = plt.colorbar(tp, ax=ax[1], ticks=[1, 3, 5, 9, 17])
+    cbar.ax.set_yticklabels(['0', '2', '4', '8', '16'])
+    ax[0].set_axis_off()
+    ax[1].set_axis_off()
+    plt.show()
+
 def files_to_example(base_path:str, res:int=-1) -> tf.train.Example:
     raveled = load_raveled(f"{base_path}.raveled")
     image_data = tf.io.gfile.GFile(f"{base_path}.jpg", 'rb').read()
@@ -107,19 +147,19 @@ def files_to_example(base_path:str, res:int=-1) -> tf.train.Example:
     assert image.shape[0] == image.shape[1], f'Invalid image shape: {image.shape}'
     image_res = image.shape[0]
 
-    target = pin_path_to_target(raveled)
-    target = tf.convert_to_tensor(target, tf.uint8)
-    target = tf.reshape(target, (_N_PINS, _N_CONS, 1))
-    enc_target = tf.io.encode_jpeg(target, quality=75).numpy()
+    target = pin_path_to_target_v5(raveled)
+    target = tf.convert_to_tensor(np.tril(target), tf.uint8)
+    sp_target = tf.sparse.from_dense(target)
+    sp_indices = tf.cast(sp_target.indices, tf.uint8)
 
     return tf.train.Example(features=tf.train.Features(feature={
         'record/version': _int_to_feature(_RECORD_FORMAT_VERSION),
         'record/name': _bytes_to_feature(base_path.encode('utf-8')),
         'image/encoded': _bytes_to_feature(image_data),
         'image/res': _int_to_feature(image_res),
-        'target/encoded': _bytes_to_feature(enc_target),
         'target/n_pins': _int_to_feature(_N_PINS),
-        'target/n_cons': _int_to_feature(_N_CONS),
+        'target/sparsity': _int_to_feature(sp_indices.shape[0]),
+        'target/indices': _tensor_to_feature(tf.reshape(sp_indices, [-1])),
     }))
 
 class Shard():
@@ -199,9 +239,9 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     if args.output == "@vis":
-        targets = list(Path(args.input).rglob('*.raveled'))
+        targets = list(Path(args.input).rglob('*.raveled'))[:10]
         random.shuffle(targets)
         for raveled_path in targets:
-            visualize(raveled_path)
+            visualize_v5(raveled_path)
 
     write_records(args.input, args.output, args.num_shards, args.sequential, args.resolution)
