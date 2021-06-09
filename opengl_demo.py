@@ -8,7 +8,7 @@ import utils
 
 def do_demo(model_path:str, data_source,
             mirror:bool=False, cycle:bool=True, delay:int=0) -> None:
-    model = utils.TangledModel(model_path)
+    model = utils.TangledPredictor(model_path)
     image_source = utils.ImageIterator(data_source, cycle, model.res)
 
     vertex_src = f'''
@@ -18,13 +18,13 @@ def do_demo(model_path:str, data_source,
         float n_pins = {model.n_pins};
         float theta = 2.0 * PI * pin.x / n_pins;
         float x = sin(theta), y = cos(theta);
-        gl_Position = vec4({'-x' if mirror else 'x'}, -y, 0.0, 1.0);
+        gl_Position = vec4(({'-x' if mirror else 'x'}), -y, 0.0, 1.0);
     }}
     '''
 
     fragment_src = '''
     void main() {
-        gl_FragColor = vec4(0.0, 0.0, 0.0, 0.05);
+        gl_FragColor = vec4(0.0, 0.0, 0.0, 0.04);
     }
     '''
 

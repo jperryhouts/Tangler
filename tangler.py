@@ -27,10 +27,11 @@ if __name__ == "__main__":
     train_parser = subparsers.add_parser("train", help='Train the model')
     train_parser.add_argument('--optimizer', type=str, default='adam_amsgrad', help='Optimizer to use in model.fit. Default: adam_amsgrad')
     train_parser.add_argument('--learning-rate', '-lr', type=float, default=1e-4, help='Learning rate for optimizer. Default: 1e-4')
-    train_parser.add_argument('--loss', type=str, default='mse', help='Loss function for optimizer. Default: mse')
+    train_parser.add_argument('--loss', type=str, default='binary_crossentropy', help='Loss function for optimizer. Default: binary_crossentropy')
     train_parser.add_argument('--cache', action='store_true', help='Cache examples in RAM. Default: false')
     train_parser.add_argument('--vis', action='store_true', help='Generate a graphical representation of the model architecture. Saves to `output_dir/models/{...}.png`')
     train_parser.add_argument('--dry-run', action='store_true', help='Compile and summarize model, then exit')
+    train_parser.add_argument('--peek', action='store_true', help='Visualize each data example')
     train_parser.add_argument('--format', type=str, default='h5', choices=['h5', 'tf'], help='Format to save model. Default: h5')
     train_parser.add_argument('--fp16', action='store_true', help='Use mixed precision fp16/fp32 training mode. Default: false')
     train_parser.add_argument('--batch', '-b', type=int, default=100, help='Number of examples per batch. Default: 100')
@@ -99,7 +100,8 @@ if __name__ == "__main__":
             loss_function=args.loss, optimizer=args.optimizer, learning_rate=args.learning_rate,
             data_cache=args.cache, vis_model=args.vis, batch_size=args.batch, save_format=args.format,
             epochs=args.epochs, patience=args.patience, use_mixed_precision=args.fp16,
-            train_steps=args.train_steps, val_steps=args.val_steps, dry_run=args.dry_run, debug=args.debug)
+            train_steps=args.train_steps, val_steps=args.val_steps,
+            dry_run=args.dry_run, debug=args.debug, peek=args.peek)
 
     elif args.mode == "predict":
         from predict import do_predict

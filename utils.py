@@ -1,8 +1,13 @@
+import os, random, logging
+from pathlib import Path
 import itertools
+import re
 from typing import Tuple, Any, Iterable
 import numpy as np
 import tensorflow as tf
 import matplotlib.pyplot as plt
+
+from model import TangledModel
 
 try:
     from PIL import Image, ImageOps
@@ -37,6 +42,77 @@ def load_img(src: str, res: int) -> np.array:
         img = img.resize((res, res), box=crop)
 
     return np.array(img)
+
+def pin_path_to_target_v4(path:Iterable, n_pins:int) -> np.ndarray:
+    target = np.zeros((n_pins, n_pins, 1), dtype=np.float16)
+    for a,b in zip(path[:-1], path[1:]):
+        target[a][b][0] += 1
+        target[b][a][0] += 1
+    # zero the elements near the diagonal
+    target = np.tril(target,-15)+np.triu(target,15)
+    return target
+
+def example_generator(src_dir:str, n_pins:int, res:int=-1) -> Tuple[tf.Tensor, tf.Tensor]:
+    if type(src_dir) is bytes:
+        src_dir = src_dir.decode('utf-8')
+    assert os.path.isdir(src_dir)
+    get_stem = lambda p: str(os.path.join(p.parent.absolute(), p.stem))
+    examples = [get_stem(path) for path in Path(src_dir).rglob('*.jpg')]
+    assert len(examples) > 0
+    random.shuffle(examples)
+
+    X,Y = np.mgrid[-1:1:res*1j,-1:1:res*1j]
+    R2 = X**2+Y**2
+    C_MASK = 1*(R2<1.0)
+    C_MASK = C_MASK.reshape((res,res,1)).astype(np.uint8)
+    C_MASK = tf.convert_to_tensor(C_MASK, dtype=tf.uint8)
+    C_MASK_INV = tf.convert_to_tensor(1-C_MASK, dtype=tf.uint8)
+
+    for example in examples:
+        image_data = tf.io.gfile.GFile(f"{example}.jpg", 'rb').read()
+        image = tf.io.decode_jpeg(image_data)
+        image = C_MASK*image + 127*C_MASK_INV
+
+        raveled = np.loadtxt(f"{example}.raveled", dtype=np.int64).flatten()
+        # indices = set([tuple(sorted(ij)) for ij in zip(raveled[:-1], raveled[1:])])
+        # indices = np.array(list(indices))
+        # print(indices)c
+        # indices = np.array([raveled[:-1], raveled[1:]]).T
+        #print(indices)
+        #indices = np.sort(indices, axis=-1)
+        #print(indices)
+        # tf.convert_to_tensor([x, y])
+        # target_sp = tf.SparseTensor(indices, tf.ones(indices.shape[0]), (n_pins, n_pins))
+        # target_sp = tf.sparse.reorder(target_sp)
+        # target = tf.sparse.to_dense(target_sp)
+        target = np.zeros((n_pins, n_pins), dtype=np.int64)
+        target[raveled[:-1],raveled[1:]] = 1
+        target[raveled[1:],raveled[:-1]] = 1
+        ## Remove diagonal?
+        # target = np.tril(target,-1)+np.triu(target,1)
+        target = tf.convert_to_tensor(target, tf.int64)
+
+        yield (image, target)
+
+def plot_example(image:np.ndarray, target:np.ndarray, n_pins:int=256) -> None:
+    _, ax = plt.subplots(1, 3, figsize=(14,4))
+    ax[0].imshow(image, aspect=1, cmap=plt.cm.gray, vmin=0, vmax=255)
+    ax[1].imshow(target, aspect=1, cmap=plt.cm.gray_r, interpolation='nearest')
+
+    target = np.tril(target)
+    w = np.where(target > 0)
+    path = []
+    for i in range(w[0].size):
+        path.append(w[0][i])
+        path.append(w[1][i])
+
+    print("Path length:", len(path))
+    raveled = np.array(path).astype(np.float)
+    theta = raveled*2*np.pi/n_pins
+
+    ax[2].plot(np.sin(theta), 1-np.cos(theta), 'k-', lw=0.01)
+    ax[2].set_axis_off()
+    plt.show()
 
 def encode_example(image:np.ndarray, target:np.ndarray) -> tf.train.Example:
     _, n_pins, n_cons = target.shape
@@ -161,56 +237,69 @@ class CustomTensorBoard(tf.keras.callbacks.TensorBoard):
         logs.update({'lr': tf.keras.backend.eval(self.model.optimizer.lr)})
         super().on_epoch_end(epoch, logs)
 
-class TangledModel(tf.keras.Model):
+def inference_to_path(result:np.ndarray, path_len:int, threshold:float=0.0) -> np.ndarray:
+    rmin = result.min()
+    res = np.tril(result-rmin)+rmin
+    w = np.where(res > threshold)
+
+    path = np.zeros(path_len)
+    idx = 0
+    for i in range(w[0].size):
+        path[idx] = w[0][i]
+        path[idx+1] = w[1][i]
+        idx += 2
+        if idx >= path_len-1:
+            logging.warn(f"String path buffer exceeded: {2*w[0].size} > {path_len}")
+            break
+
+    # print(idx)
+    return path
+
+class TangledPredictor():
     def __init__(self, model_path:str) -> None:
-        base_model = tf.keras.models.load_model(model_path, custom_objects={
-            'sin': tf.math.sin,
-            'cos': tf.math.cos,
-        })
-        # super().__init__(base_model.input, base_model.layers[-4].output)
-        super().__init__(base_model.input, base_model.output)
-        self.res = self.input.type_spec.shape[1]
-        self.n_pins = self.output.type_spec.shape[-2]
-        self.n_cols = self.output.type_spec.shape[-1]
-        self.path_len = self.n_pins * (2 * self.n_cols + 1)
-        print(self.res, self.n_pins, self.n_cols)
+        base_model = TangledModel()
+        base_model.load_weights(model_path)
+        self.model = base_model
+        # self.model = tf.keras.Model(base_model.input, base_model.layers[-2].output)
+        self.res, self.n_pins = base_model.res, base_model.n_pins
+        self.path_len = 60000
         self.prediction_num = 0
 
-    def predict(self, inputs:np.ndarray) -> np.ndarray:
-        img = inputs.reshape((1,self.res,self.res,1))
-        result = super().predict(img.astype(np.uint8)).astype(np.float)
-
-        ppins = np.round(self.n_pins * result[0])
-        # ppins = np.round(self.n_pins*result[0][0]/(2*np.pi))
-        ppins += np.arange(self.n_pins).reshape((self.n_pins,1))
-
-        self.prediction_num += 1
-        if self.prediction_num == 100:
-            print(result.shape, result.dtype, ppins.shape, ppins.dtype)
-            _, ax = plt.subplots(1,3)
-            ax[0].imshow(result[0], aspect='auto', cmap=plt.cm.magma, interpolation='nearest')
-            ax[1].imshow(ppins, aspect='auto', cmap=plt.cm.magma, interpolation='nearest')
-            ax[2].imshow(ppins%self.n_pins, aspect='auto', cmap=plt.cm.magma, interpolation='nearest')
-            #plt.colorbar()
-            plt.show()
-
-        return ppins
+    def show(self, result, threshold=0.0):
+        _, ax = plt.subplots(1,1)
+        vrange = max(abs(result.max()), abs(result.min()))
+        im = ax.imshow(result, aspect='auto', cmap=plt.cm.seismic, interpolation='nearest', vmin=-vrange, vmax=vrange)
+        ax.contour(result, levels=[threshold], colors='k', linewidths=0.5)
+        plt.colorbar(im, ax=ax)
+        plt.show()
 
     def predict_convert(self, inputs:np.ndarray) -> np.ndarray:
-        ppins = self.predict(inputs)
+        img = inputs.reshape((1,self.res,self.res,1))
+        n_pins = self.n_pins
+        result = self.model.predict(img.astype(np.uint8))
+        result = result.astype(np.float).reshape((n_pins,n_pins))
+        #result = result.astype(np.float).reshape((2*n_pins, 2*n_pins))
+        #a = n_pins//2
+        #b = a + n_pins
+        #result = result[a:b,a:b]
 
-        ppins = ppins%self.n_pins
+        rmin = result.min()
+        res = result - rmin
+        res = np.tril(res, -2) + np.triu(res, -2)
+        res += rmin
+        res = (res + res.T) / 2.0
+        threshold = np.percentile(res, 60)
+        # threshold = 0.0
 
-        path = np.zeros(self.path_len)
-        idx = 0
-        for A in range(self.n_pins):
-            path[idx] = A
-            idx += 1
-            for B in ppins[int(A)]:
-                path[idx] = B
-                path[idx+1] = A
-                idx += 2
-        return path
+        self.prediction_num += 1
+        if self.prediction_num == 10:
+            print('result range',result.min(), result.max())
+            print('threshold',threshold)
+            print(list(range(5,100,5)))
+            print(np.percentile(res, range(1,100,5)))
+            self.show(res, threshold)
+
+        return inference_to_path(res, self.path_len, threshold)
 
 class FlatModel(tf.keras.Model):
     def __init__(self, model_path:str, n_pins:int=256) -> None:
