@@ -43,7 +43,7 @@ find /DATA -name '*JPEG' | while read fn ; do
 done | parallel -j200 bash do_ravel.sh {}
 ```
 
-For each image, `$HOME/Data/**/*.JPEG`, this will generate a normalized version: `$HOME/Data/**/*.jpg`, and a target string sequence: `$HOME/Data/**/*.raveled`. Note that I am over-allocating resources by a lot, hoping that will prompt the operating system to do a lot of IO operations in the background and saturate the CPU resources (this was run on an EC2 instance with 32 ARM cores). In my case I was able to process about 2200 images per minute, but you might get more mileage out of requesting fewer parallel processes.
+For each image, `$HOME/Data/**/*.JPEG`, this will generate a normalized version: `$HOME/Data/**/*.jpg`, and a target string sequence: `$HOME/Data/**/*.raveled`. Note that I am over-allocating resources (by a lot), hoping that will prompt the operating system to do a lot of IO in the background and saturate the CPU resources. I ran this on an EC2 instance with 32 ARM cores, and it took several hours to complete. In my case I was able to process about 2200 images per minute.
 
 Once you're certain that the above command completed successfully, you can delete the original images:
 
@@ -57,4 +57,6 @@ One major bottleneck in training neural networks with large datasets is file acc
 
 ```bash
 python3 make_tfrecords.py "/DATA/train" "/DATA/tfrecords/train"
+python3 make_tfrecords.py "/DATA/test" "/DATA/tfrecords/test"
+python3 make_tfrecords.py "/DATA/val" "/DATA/tfrecords/val"
 ```
