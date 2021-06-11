@@ -42,6 +42,8 @@ if __name__ == "__main__":
     demo_parser.add_argument('--delay', '-d', default=0, type=int, help='Time delay in milliseconds between frames. Default: 0')
     demo_parser.add_argument('--path-buffer', default=35000, type=int, help='Size of memory buffer to use for string path. Default: 60000')
     demo_parser.add_argument('--threshold', default=-2.5, type=float, help='Value to consider a positive prediction. Default: 0')
+    demo_parser.add_argument('--resolution', default=512, type=int, help='Size of rendered output. Default: 512')
+    demo_parser.add_argument('--webcam', help='Output as fake webcam device using v4l2loopback. The path of a v4l2loopback device must be specified as an argument after this flag.')
 
     demo_parser.add_argument('model', help='Saved model path')
 
@@ -92,4 +94,5 @@ if __name__ == "__main__":
                     f'Not a valid input source: {src}'
 
         from opengl_demo import do_demo
-        do_demo(args.model, source, args.mirror, args.cycle, args.delay, args.path_buffer, args.threshold)
+        do_demo(args.model, source, args.mirror, args.cycle, args.delay,
+            args.path_buffer, args.threshold, args.resolution, args.webcam)

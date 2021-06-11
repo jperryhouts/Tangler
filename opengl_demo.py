@@ -1,6 +1,5 @@
-import time
-from typing import Iterable, Generator, Union
-import itertools
+from typing import Iterable, Generator, Union, Optional
+import itertools, time
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
@@ -18,6 +17,7 @@ class AppState():
         self.paused = paused
         self.threshold = threshold
         self.resampling = resampling
+        self.raw_feed = False
 
     def handle_input(self, win, key, _A, position, _C):
         if position == 1:
@@ -25,6 +25,9 @@ class AppState():
                 glfw.set_window_should_close(win, 1)
             elif key == glfw.KEY_S:
                 self.show_tangle = True
+            elif key == glfw.KEY_ENTER:
+                self.raw_feed = (not self.raw_feed)
+                print("Raw webcam feed:",self.raw_feed)
             elif key == glfw.KEY_SPACE:
                 self.paused = (not self.paused)
                 print("Paused:",self.paused)
@@ -77,18 +80,31 @@ class Camera():
             self.y0, self.x0 = (hc-imres//2, wc-imres//2)
             self.y1, self.x1 = (hc+imres//2, wc+imres//2)
 
+    def read(self):
+        if self.camera.isOpened():
+            success, frame = self.camera.read()
+            if success:
+                self.latest = frame
+            return (success, frame)
+        else:
+            return (False, None)
+
+    def crop(self, img:np.ndarray) -> np.ndarray:
+        return img[self.y0:self.y1,self.x0:self.x1]
+
     def img_stream(self) -> Generator[np.ndarray, None, None]:
         while self.camera.isOpened():
-            success, frame = self.camera.read()
+            success, frame = self.read()
 
             if success:
                 img = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-                img = img[self.y0:self.y1,self.x0:self.x1]
+                img = self.crop(img)
                 img = cv2.resize(img, (self.res, self.res))
                 yield img
 
 class ImageIterator():
-    def __init__(self, source:Union[str,Iterable], cycle:bool, res:int) -> None:
+    def __init__(self, source:Union[str,Iterable], cycle:bool, res:int, mirror:bool=False) -> None:
+        self.mirror = mirror
         if source == 'webcam':
             self.type = 'webcam'
             self.cam = Camera(res)
@@ -119,17 +135,25 @@ class ImageIterator():
         img = self.source.__next__()
         img *= self.cmask
         img += self.cmask_inv*127
+        if self.mirror:
+            img = img[:,::-1]
         return img
 
-def do_demo(model_path:str, data_source, mirror:bool=False, cycle:bool=True,
-        delay:int=0, path_len:int=35000, threshold:float=-2.5) -> None:
+def do_demo(model_path:str, data_source:Union[str,Iterable], mirror:bool=False,
+        cycle:bool=True, delay:int=0, path_len:int=35000, threshold:float=-2.5,
+        res:int=512, webcam:Optional[str]=None) -> None:
 
     app_state = AppState(threshold)
 
     model = TangledModel()
     model.load_weights(model_path)
 
-    image_source = ImageIterator(data_source, cycle, 256)
+    INPUT_RES = 256
+    image_source = ImageIterator(data_source, cycle, INPUT_RES, mirror)
+
+    if webcam is not None:
+        import pyfakewebcam
+        webcam = pyfakewebcam.FakeWebcam(webcam, res, res)
 
     vertex_src = f'''
     in float pin;
@@ -138,7 +162,7 @@ def do_demo(model_path:str, data_source, mirror:bool=False, cycle:bool=True,
         float n_pins = {model.n_pins};
         float theta = 2.0 * PI * pin.x / n_pins;
         float x = sin(theta), y = cos(theta);
-        gl_Position = vec4(({'-x' if mirror else 'x'}), -y, 0.0, 1.0);
+        gl_Position = vec4(x, -y, 0.0, 1.0);
     }}
     '''
 
@@ -151,7 +175,7 @@ def do_demo(model_path:str, data_source, mirror:bool=False, cycle:bool=True,
     if not glfw.init():
         raise Exception("Cannot initialize glfw")
 
-    window = glfw.create_window(1024, 1024, "Tangler Demo", None, None)
+    window = glfw.create_window(res, res, "Tangler Demo", None, None)
 
     if not window:
         glfw.terminate()
@@ -190,34 +214,54 @@ def do_demo(model_path:str, data_source, mirror:bool=False, cycle:bool=True,
 
         if not app_state.paused:
             frame_count += 1
-            start_loop = time.perf_counter()
-            img = image_source.__next__()
-            begin = time.perf_counter()
 
+            timer0[1:] = timer0[:-1]
+            timer0[0] = time.perf_counter()
+
+            img = image_source.__next__()
             # pins[:6001] = utils.img_to_ravel(img)
             pred = model.img_to_tangle(img)
-            middle = time.perf_counter()
+
+            timer1[1:] = timer1[:-1]
+            timer1[0] = time.perf_counter()
+
             resampled = utils.resample(pred, app_state.threshold, app_state.resampling)
             pins[:] = utils.untangle(resampled, path_len, 0.5, np.float32)
-            end = time.perf_counter()
+
+            timer2[1:] = timer2[:-1]
+            timer2[0] = time.perf_counter()
 
             glClear(GL_COLOR_BUFFER_BIT)
             glBufferData(GL_ARRAY_BUFFER, pins.nbytes, pins, GL_DYNAMIC_COPY)
             glDrawArrays(GL_LINES, 0, pins.size)
 
+            if frame_count%100 == 0:
+                inf_time = int(1000*(timer1-timer0).mean())
+                u_time = int(1000*(timer2-timer1).mean())
+                frame_rate = (timer2.size-1)/(timer2[0]-timer2[-1])
+                print(f"{frame_rate:0.03f} fps: {inf_time} ms / {u_time} ms [inference/untangle]")
+
             glfw.swap_buffers(window)
 
-            timer0[1:] = timer0[:-1]
-            timer0[0] = 1000*(time.perf_counter()-start_loop)
+        if webcam is not None:
+            if app_state.raw_feed:
+                success, frame = image_source.cam.read()
+                if success:
+                    frame = image_source.cam.crop(frame)
+                    frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                    frame = cv2.resize(frame, (res,res))
+                    if mirror:
+                        frame = frame[:,::-1,:]
+                else:
+                    frame = np.zeros((res, res, 3))
+            else:
+                res = glReadPixels(0, 0, res, res, GL_RGB, GL_UNSIGNED_BYTE)
+                frame = np.frombuffer(res,dtype=np.uint8, count=res*res*3)
+                frame = frame.reshape((res,res,3))
+                frame = frame[::-1,:]
 
-            timer1[1:] = timer1[:-1]
-            timer1[0] = 1000*(middle-begin)
-
-            timer2[1:] = timer2[:-1]
-            timer2[0] = 1000*(end-middle)
-
-            if frame_count%100 == 0:
-                print(f"Timers: {timer1.mean():d} / {timer2.mean():d} / {timer0.mean():d} ms [inference/untangle/loop]")
+            frame = cv2.resize(frame, (res,res))
+            webcam.schedule_frame(frame)
 
         if app_state.show_tangle:
             app_state.show_prediction(pred, resampled)
