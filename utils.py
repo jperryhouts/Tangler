@@ -1,6 +1,8 @@
 import os, random, logging
-from pathlib import Path
 from typing import Callable, Union
+from pathlib import Path
+from subprocess import Popen, PIPE
+from io import BytesIO
 import numpy as np
 import tensorflow as tf
 import tensorflow_addons as tfa
@@ -31,12 +33,38 @@ def load_img(src: str, res: int) -> np.array:
 
     return np.array(img)
 
+def img_to_ravel(img:np.ndarray) -> np.ndarray:
+    sp = Popen(['/home/jmp/bin/raveler','-r','256','-f','tsv','-'], stdout=PIPE, stdin=PIPE)
+    img = img.astype(np.uint8)
+    so = sp.communicate(input=img.tobytes())
+    pins = np.loadtxt(BytesIO(so[0])).T[0]
+    return pins.astype(np.float32)
+
+@tf.function
+def periodic_padding(tensor:tf.Tensor, pad:int) -> tf.Tensor:
+    upper_pad = tensor[:,-pad:,:]
+    lower_pad = tensor[:,:pad,:]
+    partial = tf.concat([upper_pad, tensor, lower_pad], axis=1)
+    left_pad = partial[:,:,-pad:]
+    right_pad = partial[:,:,:pad]
+    padded = tf.concat([left_pad, partial, right_pad], axis=2)
+    return padded
+
+@tf.function
+def pooled_binary_crossentropy(y_true:tf.Tensor, y_pred:tf.Tensor) -> tf.Tensor:
+    y_true = periodic_padding(y_true, 1)
+    y_pred = periodic_padding(y_pred, 1)
+    y_true = tf.nn.max_pool2d(tf.expand_dims(y_true, -1), 3, 1, padding='VALID')
+    y_pred = tf.nn.max_pool2d(tf.expand_dims(y_pred, -1), 3, 1, padding='VALID')
+    loss = tf.keras.losses.binary_crossentropy(y_true, y_pred, from_logits=True)
+    return loss
+
 def target_to_complex(target:np.ndarray, n_pins:int=256) -> np.ndarray:
     target = target.reshape((n_pins, n_pins, 2))
     return target[:,:,0] + 1j*target[:,:,1]
 
 def target_to_tangle(target:np.ndarray, n_pins:int=256) -> np.ndarray:
-    return target.reshape((n_pins//2,n_pins//2))
+    return target.reshape((n_pins,n_pins))
     # target_fft = target_to_complex(target, n_pins)
     # target_fft = np.fft.fftshift(target_fft)
     # tangle = np.fft.ifft2(target_fft, s=(n_pins,n_pins))
@@ -57,7 +85,7 @@ def dropout(array:np.ndarray, rate:float) -> np.ndarray:
 
 def resample(tangled:np.ndarray, threshold:float, n_dropouts:int=10) -> np.ndarray:
     resampled = np.zeros(tangled.shape)
-    for T in np.linspace(threshold, tangled.max(), n_dropouts):
+    for T in np.linspace(threshold, tangled.max(), n_dropouts, endpoint=False):
         resampled += dropout(1.0*(tangled > T), 1/n_dropouts)
     return 1*(resampled > 0)
 

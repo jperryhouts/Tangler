@@ -110,16 +110,13 @@ def do_train(train_data:str, val_data:str, output_dir:str, model_name:str=None,
     else:
         opt = optimizer
 
-    @tf.function
-    def pooled_loss(y_true, y_pred):
-        y_true = tf.nn.max_pool2d(tf.expand_dims(y_true, -1), 2, 2, padding='SAME')
-        y_pred = tf.nn.max_pool2d(tf.expand_dims(y_pred, -1), 2, 2, padding='SAME')
-        loss = tf.keras.losses.binary_crossentropy(y_true, y_pred, from_logits=True)
-        return loss
-
-    if loss_function == 'binary_crossentropy':
-        loss_function = pooled_loss
-        # loss_function = tf.keras.losses.BinaryCrossentropy(from_logits=True)
+    if loss_function == 'pooled_binary_crossentropy':
+        loss_function = utils.pooled_binary_crossentropy
+        metrics=[tf.keras.metrics.BinaryCrossentropy(from_logits=True),
+                tf.keras.metrics.BinaryAccuracy(),
+                tf.keras.metrics.AUC(from_logits=True)]
+    elif loss_function == 'binary_crossentropy':
+        loss_function = tf.keras.losses.BinaryCrossentropy(from_logits=True)
         metrics=[tf.keras.metrics.BinaryCrossentropy(from_logits=True),
                 tf.keras.metrics.BinaryAccuracy(),
                 tf.keras.metrics.AUC(from_logits=True)]

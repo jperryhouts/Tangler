@@ -15,7 +15,7 @@ if __name__ == "__main__":
     train_parser = subparsers.add_parser("train", help='Train the model')
     train_parser.add_argument('--optimizer', type=str, default='adam_amsgrad', help='Optimizer to use in model.fit. Default: adam_amsgrad')
     train_parser.add_argument('--learning-rate', '-lr', type=float, default=1e-4, help='Learning rate for optimizer. Default: 1e-4')
-    train_parser.add_argument('--loss', type=str, default='binary_crossentropy', help='Loss function for optimizer. Default: binary_crossentropy')
+    train_parser.add_argument('--loss', type=str, default='pooled_binary_crossentropy', help='Loss function for optimizer. Default: pooled_binary_crossentropy')
     train_parser.add_argument('--cache', action='store_true', help='Cache examples in RAM. Default: false')
     train_parser.add_argument('--vis', action='store_true', help='Generate a graphical representation of the model architecture. Saves to `output_dir/models/{...}.png`')
     train_parser.add_argument('--summarize', action='store_true', help='Compile and summarize model, then exit')
@@ -40,8 +40,8 @@ if __name__ == "__main__":
     demo_parser.add_argument('--cycle', action='store_true', help='Repeat input images indefinitely. Ignored unless --source files is specified. Default: false')
     demo_parser.add_argument('--mirror', '-m', action='store_true', help='Flip visualization output Left/Right. Default: false')
     demo_parser.add_argument('--delay', '-d', default=0, type=int, help='Time delay in milliseconds between frames. Default: 0')
-    demo_parser.add_argument('--path-buffer', default=60000, type=int, help='Size of memory buffer to use for string path. Default: 60000')
-    demo_parser.add_argument('--threshold', default='0', help='Value to consider a positive prediction. Default: 0')
+    demo_parser.add_argument('--path-buffer', default=35000, type=int, help='Size of memory buffer to use for string path. Default: 60000')
+    demo_parser.add_argument('--threshold', default=-2.5, type=float, help='Value to consider a positive prediction. Default: 0')
 
     demo_parser.add_argument('model', help='Saved model path')
 
@@ -91,9 +91,5 @@ if __name__ == "__main__":
                 assert os.path.isfile(src), \
                     f'Not a valid input source: {src}'
 
-        threshold = args.threshold
-        if not threshold.endswith('%'):
-            threshold = float(threshold)
-
         from opengl_demo import do_demo
-        do_demo(args.model, source, args.mirror, args.cycle, args.delay, args.path_buffer, threshold)
+        do_demo(args.model, source, args.mirror, args.cycle, args.delay, args.path_buffer, args.threshold)

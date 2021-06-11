@@ -21,16 +21,16 @@ class TangledModel(tf.keras.Model):
         # encoder = tf.keras.layers.Conv2D(1, 4, strides=1, padding='SAME')(encoder)
         # outputs = tf.keras.layers.Reshape((n_pins, n_pins))(encoder)
 
-        # downsampled = Encoder.downsample(3, 4, apply_batchnorm=False)(inputs) # 256x256 -> 128x128
-        # encoder = Encoder.mobilenet_encoder(downsampled)
-        # encoder = tf.keras.layers.Concatenate()([encoder, downsampled])
-        # encoder = tf.keras.layers.Conv2DTranspose(1, 4, strides=2, padding='SAME',
-        #     kernel_initializer=tf.random_normal_initializer(0., 0.02),
-        #     kernel_regularizer=tf.keras.regularizers.l2())(encoder) # 128x128 -> 256x256
-        # outputs = tf.keras.layers.Reshape((n_pins, n_pins))(encoder)
-
-        encoder = Encoder.u_net(preprocessed)
+        downsampled = Encoder.downsample(3, 4, apply_batchnorm=False)(preprocessed) # 256x256 -> 128x128
+        encoder = Encoder.mobilenet_encoder(downsampled)
+        encoder = tf.keras.layers.Concatenate()([encoder, downsampled])
+        encoder = tf.keras.layers.Conv2DTranspose(1, 4, strides=2, padding='SAME',
+            kernel_initializer=tf.random_normal_initializer(0., 0.02),
+            kernel_regularizer=tf.keras.regularizers.l2())(encoder) # 128x128 -> 256x256
         outputs = tf.keras.layers.Reshape((n_pins, n_pins))(encoder)
+
+        # encoder = Encoder.u_net(preprocessed)
+        # outputs = tf.keras.layers.Reshape((n_pins, n_pins))(encoder)
 
         # preproc = tf.keras.layers.Conv2D(3, 2, strides=1, padding='SAME', use_bias=False)(inputs)
         # encoder = Encoder.resnet50v2_encoder(preproc)
@@ -136,7 +136,7 @@ class Encoder():
 
         result = tf.keras.Sequential()
         result.add(tf.keras.layers.Conv2DTranspose(filters, size, strides=2,
-            kernel_regularizer=tf.keras.regularizers.l2(l2=1e-4),
+            # kernel_regularizer=tf.keras.regularizers.l2(l2=1e-4),
             kernel_initializer=initializer, use_bias=False, padding='SAME'))
 
         result.add(tf.keras.layers.BatchNormalization())
@@ -194,7 +194,7 @@ class Encoder():
 
     @classmethod
     def mobilenet_encoder(cls, inputs):
-        base_model = tf.keras.applications.MobileNetV2(input_shape=(256,256,3),
+        base_model = tf.keras.applications.MobileNetV2(input_shape=(128,128,3),
                                                         include_top=False,
                                                         weights='imagenet')
 
@@ -210,7 +210,7 @@ class Encoder():
 
         down_stack = tf.keras.Model(base_model.input, base_model_outputs)
 
-        down_stack.trainable = False
+        # down_stack.trainable = False
 
         up_stack = [
             cls.upsample(512, 4),  # 4x4 -> 8x8
