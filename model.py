@@ -15,11 +15,11 @@ class TangledModel(tf.keras.Model):
         preprocessed = tf.keras.layers.experimental.preprocessing.Rescaling(1./127.5, offset=-1)(inputs)
         preprocessed = tf.keras.layers.experimental.preprocessing.RandomContrast(0.2)(preprocessed)
 
-        preprocessed = tf.keras.layers.Conv2D(3, 4, strides=1, padding='SAME')(preprocessed)
-        encoder = Encoder.mobilenet_encoder(preprocessed)
-        encoder = tf.keras.layers.Concatenate()([encoder, preprocessed])
-        encoder = tf.keras.layers.Conv2D(1, 4, strides=1, padding='SAME')(encoder)
-        outputs = tf.keras.layers.Reshape((n_pins, n_pins))(encoder)
+        # preprocessed = tf.keras.layers.Conv2D(3, 4, strides=1, padding='SAME')(preprocessed)
+        # encoder = Encoder.mobilenet_encoder(preprocessed)
+        # encoder = tf.keras.layers.Concatenate()([encoder, preprocessed])
+        # encoder = tf.keras.layers.Conv2D(1, 4, strides=1, padding='SAME')(encoder)
+        # outputs = tf.keras.layers.Reshape((n_pins, n_pins))(encoder)
 
         # downsampled = Encoder.downsample(3, 4, apply_batchnorm=False)(inputs) # 256x256 -> 128x128
         # encoder = Encoder.mobilenet_encoder(downsampled)
