@@ -41,7 +41,7 @@ if __name__ == "__main__":
     demo_parser.add_argument('--mirror', '-m', action='store_true', help='Flip visualization output Left/Right. Default: false')
     demo_parser.add_argument('--delay', '-d', default=0, type=int, help='Time delay in milliseconds between frames. Default: 0')
     demo_parser.add_argument('--path-buffer', default=60000, type=int, help='Size of memory buffer to use for string path. Default: 60000')
-    demo_parser.add_argument('--threshold', default='60%', help='Value to consider a positive prediction. If selection ends with %, the corresponding percentil of results will be displayed. Default: 60%')
+    demo_parser.add_argument('--threshold', default='0', help='Value to consider a positive prediction. Default: 0')
 
     demo_parser.add_argument('model', help='Saved model path')
 
@@ -56,7 +56,7 @@ if __name__ == "__main__":
         if (args.cpu):
             tf.config.set_visible_devices([], 'GPU')
 
-    elif args.mode == "train":
+    if args.mode == "train":
         from train import do_train
 
         assert os.path.isdir(args.train_data)
@@ -83,7 +83,8 @@ if __name__ == "__main__":
             source = []
             for src in args.input:
                 if os.path.isdir(src):
-                    source += glob.glob(os.path.join(src, '*'))
+                    source += glob.glob(os.path.join(src, '*.jpg'))
+                    source += glob.glob(os.path.join(src, '*.JPEG'))
                 else:
                     source.append(src)
             for src in source:

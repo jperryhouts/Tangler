@@ -1,8 +1,6 @@
-import datetime, os
+import datetime, os, random
 import tensorflow as tf
 import glob
-
-from tensorflow.python.keras.losses import BinaryCrossentropy
 
 from model import TangledModel
 import utils
@@ -24,8 +22,11 @@ def do_train(train_data:str, val_data:str, output_dir:str, model_name:str=None,
         train_records = glob.glob(os.path.join(train_data, '*.tfrecord'))
         val_records = glob.glob(os.path.join(val_data, '*.tfrecord'))
 
-        ds_train = tf.data.TFRecordDataset(train_records)
-        ds_val = tf.data.TFRecordDataset(val_records)
+        random.shuffle(train_records)
+        random.shuffle(val_records)
+
+        ds_train = tf.data.TFRecordDataset(train_records, num_parallel_reads=tf.data.AUTOTUNE)
+        ds_val = tf.data.TFRecordDataset(val_records, num_parallel_reads=tf.data.AUTOTUNE)
 
         ex = ds_train.take(1).map(utils.parse_example).as_numpy_iterator().next()
         record_version = ex['record/version']
@@ -63,7 +64,7 @@ def do_train(train_data:str, val_data:str, output_dir:str, model_name:str=None,
         ds_val = ds_val.repeat()
 
     if FROM_TFRECORDS:
-        ds_train = ds_train.map(utils.get_decoder(res, n_pins, rotate='any'),
+        ds_train = ds_train.map(utils.get_decoder(res, n_pins, rotate='none'),
             num_parallel_calls=tf.data.AUTOTUNE,
             deterministic=False)
         ds_val = ds_val.map(utils.get_decoder(res, n_pins, rotate='none'),
@@ -73,7 +74,6 @@ def do_train(train_data:str, val_data:str, output_dir:str, model_name:str=None,
     if peek:
         for img, target in ds_train.as_numpy_iterator():
             img = img.reshape((res,res))
-            target = target.reshape((n_pins, n_pins))
             utils.plot_example(img, target)
         return
 
@@ -110,13 +110,25 @@ def do_train(train_data:str, val_data:str, output_dir:str, model_name:str=None,
     else:
         opt = optimizer
 
-    if loss_function == 'binary_crossentropy':
-        loss_function = tf.keras.losses.BinaryCrossentropy(from_logits=True)
+    @tf.function
+    def pooled_loss(y_true, y_pred):
+        y_true = tf.nn.max_pool2d(tf.expand_dims(y_true, -1), 2, 2, padding='SAME')
+        y_pred = tf.nn.max_pool2d(tf.expand_dims(y_pred, -1), 2, 2, padding='SAME')
+        loss = tf.keras.losses.binary_crossentropy(y_true, y_pred, from_logits=True)
+        return loss
 
-    model.compile(optimizer=opt, loss=loss_function,
+    if loss_function == 'binary_crossentropy':
+        loss_function = pooled_loss
+        # loss_function = tf.keras.losses.BinaryCrossentropy(from_logits=True)
         metrics=[tf.keras.metrics.BinaryCrossentropy(from_logits=True),
-                    tf.keras.metrics.BinaryAccuracy(),
-                    tf.keras.metrics.AUC(from_logits=True)])
+                tf.keras.metrics.BinaryAccuracy(),
+                tf.keras.metrics.AUC(from_logits=True)]
+    elif loss_function == 'cosine_similarity':
+        metrics=['cosine_similarity', 'mse', 'mae']
+    else:
+        metrics=['mse', 'mae']
+
+    model.compile(optimizer=opt, loss=loss_function, metrics=metrics)
 
     timestamp = datetime.datetime.now().strftime(r'%Y%m%d-%H%M%S')
 
@@ -130,7 +142,7 @@ def do_train(train_data:str, val_data:str, output_dir:str, model_name:str=None,
     ## Train model
     log_dir = os.path.join(output_dir, 'logs', f'{timestamp}_{model_name}')
     callbacks = [
-        tf.keras.callbacks.TerminateOnNaN(),
+        # tf.keras.callbacks.TerminateOnNaN(),
         tf.keras.callbacks.ModelCheckpoint(filepath=checkpoint_path, monitor='val_loss',
             save_freq='epoch', save_best_only=True),
         tf.keras.callbacks.TensorBoard(log_dir=log_dir, update_freq=500)]
