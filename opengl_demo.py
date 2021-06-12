@@ -255,8 +255,8 @@ def do_demo(model_path:str, data_source:Union[str,Iterable], mirror:bool=False,
                 else:
                     frame = np.zeros((res, res, 3))
             else:
-                res = glReadPixels(0, 0, res, res, GL_RGB, GL_UNSIGNED_BYTE)
-                frame = np.frombuffer(res,dtype=np.uint8, count=res*res*3)
+                pix_buffer = glReadPixels(0, 0, res, res, GL_RGB, GL_UNSIGNED_BYTE)
+                frame = np.frombuffer(pix_buffer, dtype=np.uint8, count=res*res*3)
                 frame = frame.reshape((res,res,3))
                 frame = frame[::-1,:]
 
