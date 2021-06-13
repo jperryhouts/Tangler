@@ -18,9 +18,10 @@ try:
 except:
     print("Unable to load pyplot")
 
-def load_img(src: str, res: int) -> np.array:
+def load_img(src: str, res: int, grayscale:bool=True) -> np.array:
     img = Image.open(src)
-    img = ImageOps.grayscale(img)
+    if grayscale:
+        img = ImageOps.grayscale(img)
 
     crop = None
     if img.size[0] != img.size[1]:
@@ -28,13 +29,15 @@ def load_img(src: str, res: int) -> np.array:
         size2 = min(img.size)//2
         crop = (cx-size2, cy-size2, cx+size2, cy+size2)
 
-    if (img.size[0] != res) or (crop is not None):
-        img = img.resize((res, res), box=crop)
+    if res != -1:
+        if (img.size[0] != res) or (crop is not None):
+            img = img.resize((res, res), box=crop)
 
     return np.array(img)
 
 def img_to_ravel(img:np.ndarray) -> np.ndarray:
-    sp = Popen(['/home/jmp/bin/raveler','-r','256','-f','tsv','-'], stdout=PIPE, stdin=PIPE)
+    res = img.shape[0]
+    sp = Popen(['/home/jmp/bin/raveler','-r',str(res),'-f','tsv','-'], stdout=PIPE, stdin=PIPE)
     img = img.astype(np.uint8)
     so = sp.communicate(input=img.tobytes())
     pins = np.loadtxt(BytesIO(so[0])).T[0]

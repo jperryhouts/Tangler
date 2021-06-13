@@ -60,10 +60,9 @@ class AppState():
         plt.show()
 
 class Camera():
-    def __init__(self, res:int, capture_source:int=0) -> None:
+    def __init__(self, capture_source:int=0) -> None:
         self.camera = cv2.VideoCapture(capture_source)
         self.load_crop_dimensions()
-        self.res = res
 
     def close(self) -> None:
         print('Releasing camera')
@@ -80,66 +79,53 @@ class Camera():
             self.y0, self.x0 = (hc-imres//2, wc-imres//2)
             self.y1, self.x1 = (hc+imres//2, wc+imres//2)
 
-    def read(self):
-        if self.camera.isOpened():
-            success, frame = self.camera.read()
-            if success:
-                self.latest = frame
-            return (success, frame)
-        else:
-            return (False, None)
-
-    def crop(self, img:np.ndarray) -> np.ndarray:
-        return img[self.y0:self.y1,self.x0:self.x1]
-
-    def img_stream(self) -> Generator[np.ndarray, None, None]:
+    def iterator(self) -> Generator[np.ndarray, None, None]:
         while self.camera.isOpened():
-            success, frame = self.read()
+            success, frame = self.camera.read()
 
             if success:
-                img = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-                img = self.crop(img)
-                img = cv2.resize(img, (self.res, self.res))
+                img = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                img = img[self.y0:self.y1,self.x0:self.x1]
                 yield img
 
-class ImageIterator():
-    def __init__(self, source:Union[str,Iterable], cycle:bool, res:int, mirror:bool=False) -> None:
+class ImageSource():
+    def __init__(self, source:Union[str,Iterable], cycle:bool, mirror:bool=False) -> None:
         self.mirror = mirror
         if source == 'webcam':
             self.type = 'webcam'
-            self.cam = Camera(res)
-            self.source = self.cam.img_stream()
+            self.cam = Camera()
+            self.source = self.cam.iterator()
         else:
             self.type = 'files'
             self.paths = itertools.cycle(source) if cycle else itertools.chain(source)
             def gen():
                 for path in self.paths:
-                    yield utils.load_img(path, res)
+                    yield utils.load_img(path, res=-1, grayscale=False)
             self.source = gen()
-        self.res = res
-        self.load_cmask()
-
-    def load_cmask(self) -> None:
-        res = self.res
-        X,Y = np.mgrid[-1:1:res*1j,-1:1:res*1j]
-        R2 = X**2+Y**2
-        self.cmask = (1*(R2<1.0)).astype(np.uint8)
-        self.cmask_inv = 1-self.cmask
 
     def close(self) -> None:
         print("Closing ImageIterator")
         if self.type == 'webcam':
             self.cam.close()
 
-    def __next__(self):
+    def read(self):
+        ## Returnes square-cropped RGB image from
+        ## current source.
         img = self.source.__next__()
-        img *= self.cmask
-        img += self.cmask_inv*127
         if self.mirror:
             img = img[:,::-1]
+        self.latest = img
         return img
 
-def do_demo(model_path:str, data_source:Union[str,Iterable], mirror:bool=False,
+    @staticmethod
+    def resize(img, res):
+        return cv2.resize(img, (res,res))
+
+    @staticmethod
+    def rgb2gray(img):
+        return cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+
+def demo_mode(model_path:str, data_source:Union[str,Iterable], mirror:bool=False,
         cycle:bool=True, delay:int=0, path_len:int=35000, threshold:float=-2.5,
         res:int=512, webcam:Optional[str]=None) -> None:
 
@@ -148,8 +134,7 @@ def do_demo(model_path:str, data_source:Union[str,Iterable], mirror:bool=False,
     model = TangledModel()
     model.load_weights(model_path)
 
-    INPUT_RES = 256
-    image_source = ImageIterator(data_source, cycle, INPUT_RES, mirror)
+    image_source = ImageSource(data_source, cycle, mirror)
 
     if webcam is not None:
         import pyfakewebcam
@@ -212,59 +197,54 @@ def do_demo(model_path:str, data_source:Union[str,Iterable], mirror:bool=False,
     while not glfw.window_should_close(window):
         glfw.poll_events()
 
+        frame_count += 1
+        src_cropped_rgb = image_source.read()
+
+        timer0[1:] = timer0[:-1]
+        timer0[0] = time.perf_counter()
+
+        glClear(GL_COLOR_BUFFER_BIT)
+
         if not app_state.paused:
-            frame_count += 1
-
-            timer0[1:] = timer0[:-1]
-            timer0[0] = time.perf_counter()
-
-            img = image_source.__next__()
-            # pins[:6001] = utils.img_to_ravel(img)
-            pred = model.img_to_tangle(img)
+            _model_input_res = 256
+            preprocessed = image_source.resize(src_cropped_rgb, _model_input_res)
+            preprocessed = image_source.rgb2gray(preprocessed)
+            predicted = model.img_to_tangle(preprocessed)
 
             timer1[1:] = timer1[:-1]
             timer1[0] = time.perf_counter()
 
-            resampled = utils.resample(pred, app_state.threshold, app_state.resampling)
-            pins[:] = utils.untangle(resampled, path_len, 0.5, np.float32)
+            tangle = utils.resample(predicted, app_state.threshold, app_state.resampling)
+            pins[:] = utils.untangle(tangle, path_len, 0.5, np.float32)
+            # pins[:6001] = utils.img_to_ravel(preprocessed)
 
             timer2[1:] = timer2[:-1]
             timer2[0] = time.perf_counter()
 
-            glClear(GL_COLOR_BUFFER_BIT)
             glBufferData(GL_ARRAY_BUFFER, pins.nbytes, pins, GL_DYNAMIC_COPY)
-            glDrawArrays(GL_LINES, 0, pins.size)
 
-            if frame_count%100 == 0:
-                inf_time = int(1000*(timer1-timer0).mean())
-                u_time = int(1000*(timer2-timer1).mean())
-                frame_rate = (timer2.size-1)/(timer2[0]-timer2[-1])
-                print(f"{frame_rate:0.03f} fps: {inf_time} ms / {u_time} ms [inference/untangle]")
+        glDrawArrays(GL_LINES, 0, pins.size)
+        glfw.swap_buffers(window)
 
-            glfw.swap_buffers(window)
+        if frame_count%100 == 0:
+            inf_time = int(1000*(timer1-timer0).mean())
+            u_time = int(1000*(timer2-timer1).mean())
+            frame_rate = (timer0.size-1)/(timer0[0]-timer0[-1])
+            print(f"{frame_rate:0.03f} fps: {inf_time} ms / {u_time} ms [inference/untangle]")
 
         if webcam is not None:
             if app_state.raw_feed:
-                success, frame = image_source.cam.read()
-                if success:
-                    frame = image_source.cam.crop(frame)
-                    frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                    frame = cv2.resize(frame, (res,res))
-                    if mirror:
-                        frame = frame[:,::-1,:]
-                else:
-                    frame = np.zeros((res, res, 3))
+                frame = image_source.resize(src_cropped_rgb, res)
             else:
                 pix_buffer = glReadPixels(0, 0, res, res, GL_RGB, GL_UNSIGNED_BYTE)
                 frame = np.frombuffer(pix_buffer, dtype=np.uint8, count=res*res*3)
                 frame = frame.reshape((res,res,3))
                 frame = frame[::-1,:]
 
-            frame = cv2.resize(frame, (res,res))
             webcam.schedule_frame(frame)
 
         if app_state.show_tangle:
-            app_state.show_prediction(pred, resampled)
+            app_state.show_prediction(predicted, tangle)
 
 
         if delay > 0:

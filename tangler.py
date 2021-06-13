@@ -93,6 +93,6 @@ if __name__ == "__main__":
                 assert os.path.isfile(src), \
                     f'Not a valid input source: {src}'
 
-        from opengl_demo import do_demo
-        do_demo(args.model, source, args.mirror, args.cycle, args.delay,
+        from inference import demo_mode
+        demo_mode(args.model, source, args.mirror, args.cycle, args.delay,
             args.path_buffer, args.threshold, args.resolution, args.webcam)
