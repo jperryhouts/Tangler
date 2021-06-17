@@ -1,15 +1,17 @@
-from typing import Iterable, Generator, Union, Optional
-import itertools, time
+from typing import Iterable, Optional
+import time
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
-import cv2
+import tensorflow as tf
 import glfw
 from OpenGL.GL import *
 from OpenGL.GL.shaders import compileProgram, compileShader
 
 import utils
+from image_handling import init_image_source
 from model import TangledModel
+from simple_model import SimpleModel, get_down_stack
 
 class AppState():
     def __init__(self, threshold:float=0.0, resampling:int=20, paused:bool=False):
@@ -21,14 +23,14 @@ class AppState():
 
     def handle_input(self, win, key, _A, position, _C):
         if position == 1:
-            if key == glfw.KEY_Q:
+            if key == glfw.KEY_Q or key == glfw.KEY_ESCAPE:
                 glfw.set_window_should_close(win, 1)
             elif key == glfw.KEY_S:
                 self.show_tangle = True
-            elif key == glfw.KEY_ENTER:
+            elif key == glfw.KEY_SPACE:
                 self.raw_feed = (not self.raw_feed)
                 print("Raw webcam feed:",self.raw_feed)
-            elif key == glfw.KEY_SPACE:
+            elif key == glfw.KEY_P:
                 self.paused = (not self.paused)
                 print("Paused:",self.paused)
             elif key in (glfw.KEY_LEFT, glfw.KEY_RIGHT):
@@ -59,108 +61,61 @@ class AppState():
         plt.colorbar(im2, ax=ax[1])
         plt.show()
 
-class Camera():
-    def __init__(self, capture_source:int=0) -> None:
-        self.camera = cv2.VideoCapture(capture_source)
-        self.load_crop_dimensions()
+def demo(model_path:str, data_source:str, inputs:Optional[Iterable]=None,
+        mirror:bool=False, cycle:bool=True, delay:int=0, path_len:int=35000,
+        threshold:float=-2.5, res:int=512, webcam:Optional[str]=None,
+        aspect:float=1.0, show_stats:bool=False) -> None:
 
-    def close(self) -> None:
-        print('Releasing camera')
-        self.camera.release()
-
-    def load_crop_dimensions(self) -> None:
-        w, h = int(self.camera.get(cv2.CAP_PROP_FRAME_WIDTH)), int(self.camera.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        if w == h:
-            self.y0, self.x0 = [0,0]
-            self.y1, self.x1 = [h-1,w-1]
-        else:
-            imres = min(w,h)
-            wc, hc = w//2, h//2
-            self.y0, self.x0 = (hc-imres//2, wc-imres//2)
-            self.y1, self.x1 = (hc+imres//2, wc+imres//2)
-
-    def iterator(self) -> Generator[np.ndarray, None, None]:
-        while self.camera.isOpened():
-            success, frame = self.camera.read()
-
-            if success:
-                img = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                img = img[self.y0:self.y1,self.x0:self.x1]
-                yield img
-
-class ImageSource():
-    def __init__(self, source:Union[str,Iterable], cycle:bool, mirror:bool=False) -> None:
-        self.mirror = mirror
-        if source == 'webcam':
-            self.type = 'webcam'
-            self.cam = Camera()
-            self.source = self.cam.iterator()
-        else:
-            self.type = 'files'
-            self.paths = itertools.cycle(source) if cycle else itertools.chain(source)
-            def gen():
-                for path in self.paths:
-                    yield utils.load_img(path, res=-1, grayscale=False)
-            self.source = gen()
-
-    def close(self) -> None:
-        print("Closing ImageIterator")
-        if self.type == 'webcam':
-            self.cam.close()
-
-    def read(self):
-        ## Returnes square-cropped RGB image from
-        ## current source.
-        img = self.source.__next__()
-        if self.mirror:
-            img = img[:,::-1]
-        self.latest = img
-        return img
-
-    @staticmethod
-    def resize(img, res):
-        return cv2.resize(img, (res,res))
-
-    @staticmethod
-    def rgb2gray(img):
-        return cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
-
-def demo_mode(model_path:str, data_source:Union[str,Iterable], mirror:bool=False,
-        cycle:bool=True, delay:int=0, path_len:int=35000, threshold:float=-2.5,
-        res:int=512, webcam:Optional[str]=None) -> None:
+    res_x, res_y = int(aspect*res), res
 
     app_state = AppState(threshold)
+
+    # model = tf.keras.models.load_model(model_path)
+
+    n_pins = 256
+
+    # down_stack = get_down_stack()
+    # model = SimpleModel(down_stack)
+
+    # try:
+    #     down_stack.trainable = False
+    #     model.load_weights(model_path)
+    # except ValueError:
+    #     down_stack.trainable = True
+    #     model.load_weights(model_path)
 
     model = TangledModel()
     model.load_weights(model_path)
 
-    image_source = ImageSource(data_source, cycle, mirror)
+    image_source = init_image_source(data_source, inputs, mirror, cycle)
 
     if webcam is not None:
         import pyfakewebcam
-        webcam = pyfakewebcam.FakeWebcam(webcam, res, res)
+        webcam = pyfakewebcam.FakeWebcam(webcam, res_x, res_y)
+
 
     vertex_src = f'''
     in float pin;
     void main() {{
         float PI = 3.1415926535897932384626433832795;
-        float n_pins = {model.n_pins};
+        float n_pins = {n_pins};
         float theta = 2.0 * PI * pin.x / n_pins;
         float x = sin(theta), y = cos(theta);
-        gl_Position = vec4(x, -y, 0.0, 1.0);
+        gl_Position = vec4(x/{aspect}, -y, 0.0, 1.0);
     }}
     '''
 
-    fragment_src = '''
-    void main() {
-        gl_FragColor = vec4(0.0, 0.0, 0.0, 0.05);
-    }
+    thread_wt = 75e-6
+    fragment_src = f'''
+    void main() {{
+        gl_FragColor = vec4(0.0, 0.0, 0.0, {res*thread_wt});
+    }}
     '''
 
     if not glfw.init():
         raise Exception("Cannot initialize glfw")
 
-    window = glfw.create_window(res, res, "Tangler Demo", None, None)
+    window = glfw.create_window(res_x, res_y, "Tangler Demo", None, None)
 
     if not window:
         glfw.terminate()
@@ -199,6 +154,8 @@ def demo_mode(model_path:str, data_source:Union[str,Iterable], mirror:bool=False
 
         frame_count += 1
         src_cropped_rgb = image_source.read()
+        if src_cropped_rgb is None:
+            break
 
         timer0[1:] = timer0[:-1]
         timer0[0] = time.perf_counter()
@@ -209,7 +166,7 @@ def demo_mode(model_path:str, data_source:Union[str,Iterable], mirror:bool=False
             _model_input_res = 256
             preprocessed = image_source.resize(src_cropped_rgb, _model_input_res)
             preprocessed = image_source.rgb2gray(preprocessed)
-            predicted = model.img_to_tangle(preprocessed)
+            predicted = utils.img_to_tangle(model, preprocessed)
 
             timer1[1:] = timer1[:-1]
             timer1[0] = time.perf_counter()
@@ -226,7 +183,7 @@ def demo_mode(model_path:str, data_source:Union[str,Iterable], mirror:bool=False
         glDrawArrays(GL_LINES, 0, pins.size)
         glfw.swap_buffers(window)
 
-        if frame_count%100 == 0:
+        if frame_count%100 == 0 and show_stats:
             inf_time = int(1000*(timer1-timer0).mean())
             u_time = int(1000*(timer2-timer1).mean())
             frame_rate = (timer0.size-1)/(timer0[0]-timer0[-1])
@@ -234,11 +191,13 @@ def demo_mode(model_path:str, data_source:Union[str,Iterable], mirror:bool=False
 
         if webcam is not None:
             if app_state.raw_feed:
-                frame = image_source.resize(src_cropped_rgb, res)
+                frame = np.zeros((res_y, res_x, 3), dtype=np.uint8)
+                c1 = (res_x-res)//2
+                frame[:,c1:c1+res,:] = image_source.resize(src_cropped_rgb, res)
             else:
-                pix_buffer = glReadPixels(0, 0, res, res, GL_RGB, GL_UNSIGNED_BYTE)
-                frame = np.frombuffer(pix_buffer, dtype=np.uint8, count=res*res*3)
-                frame = frame.reshape((res,res,3))
+                pix_buffer = glReadPixels(0, 0, res_x, res_y, GL_RGB, GL_UNSIGNED_BYTE)
+                frame = np.frombuffer(pix_buffer, dtype=np.uint8, count=res_x*res_y*3)
+                frame = frame.reshape((res_y,res_x,3))
                 frame = frame[::-1,:]
 
             webcam.schedule_frame(frame)

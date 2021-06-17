@@ -1,5 +1,5 @@
 import os, random, logging
-from typing import Callable, Union
+from typing import Callable
 from pathlib import Path
 from subprocess import Popen, PIPE
 from io import BytesIO
@@ -8,32 +8,10 @@ import tensorflow as tf
 import tensorflow_addons as tfa
 
 try:
-    from PIL import Image, ImageOps
-except:
-    print("Unable to load PIL package")
-
-try:
     import matplotlib.pyplot as plt
     plt.style.use('seaborn-talk')
 except:
     print("Unable to load pyplot")
-
-def load_img(src: str, res: int, grayscale:bool=True) -> np.array:
-    img = Image.open(src)
-    if grayscale:
-        img = ImageOps.grayscale(img)
-
-    crop = None
-    if img.size[0] != img.size[1]:
-        cx, cy = (img.size[0]//2, img.size[1]//2)
-        size2 = min(img.size)//2
-        crop = (cx-size2, cy-size2, cx+size2, cy+size2)
-
-    if res != -1:
-        if (img.size[0] != res) or (crop is not None):
-            img = img.resize((res, res), box=crop)
-
-    return np.array(img)
 
 def img_to_ravel(img:np.ndarray) -> np.ndarray:
     res = img.shape[0]
@@ -55,11 +33,11 @@ def periodic_padding(tensor:tf.Tensor, pad:int) -> tf.Tensor:
 
 @tf.function
 def pooled_binary_crossentropy(y_true:tf.Tensor, y_pred:tf.Tensor) -> tf.Tensor:
-    y_true = periodic_padding(y_true, 1)
-    y_pred = periodic_padding(y_pred, 1)
-    y_true = tf.nn.max_pool2d(tf.expand_dims(y_true, -1), 3, 1, padding='VALID')
-    y_pred = tf.nn.max_pool2d(tf.expand_dims(y_pred, -1), 3, 1, padding='VALID')
-    loss = tf.keras.losses.binary_crossentropy(y_true, y_pred, from_logits=True)
+    y_true_pad = periodic_padding(y_true, 1)
+    y_pred_pad = periodic_padding(y_pred, 1)
+    y_true_pool = tf.nn.max_pool2d(tf.expand_dims(y_true_pad, -1), 4, 1, padding='VALID')
+    y_pred_pool = tf.nn.max_pool2d(tf.expand_dims(y_pred_pad, -1), 4, 1, padding='VALID')
+    loss = tf.keras.losses.binary_crossentropy(y_true_pool, y_pred_pool, from_logits=True)
     return loss
 
 def target_to_complex(target:np.ndarray, n_pins:int=256) -> np.ndarray:
@@ -82,6 +60,21 @@ def tangle_to_tftarget(tangle:tf.Tensor) -> tf.Tensor:
     # imag = tf.math.imag(target)
     # return tf.stack([real, imag], axis=-1)
 
+
+def preprocess_img(img:tf.Tensor) -> tf.Tensor:
+    preprocessed = tf.cast(img, tf.float32)
+    preprocessed = (preprocessed-127.5)/127.5
+    ## Randomly alter contrast:
+    preprocessed *= tf.random.uniform(shape=[], minval=0.8, maxval=1.0)
+    return preprocessed
+
+def img_to_tangle(model, image:np.ndarray) -> np.ndarray:
+    image = image.reshape((1,256,256,1)).astype(np.float32)
+    image = (image-127.5)/127.5
+    predicted = model.predict(image)
+    tangle = target_to_tangle(predicted)
+    return tangle
+
 def dropout(array:np.ndarray, rate:float) -> np.ndarray:
     mask = 1*(np.random.random(array.shape) > (1.0-rate))
     return mask*array
@@ -89,7 +82,7 @@ def dropout(array:np.ndarray, rate:float) -> np.ndarray:
 def resample(tangled:np.ndarray, threshold:float, n_dropouts:int=10) -> np.ndarray:
     resampled = np.zeros(tangled.shape)
     for T in np.linspace(threshold, tangled.max(), n_dropouts, endpoint=False):
-        resampled += dropout(1.0*(tangled > T), 1/n_dropouts)
+        resampled += dropout(1.0*(tangled > T), 1/20)
     return 1*(resampled > 0)
 
 def untangle(tangled:np.ndarray, path_len:int, threshold:float=0.0,
@@ -176,6 +169,7 @@ def example_generator(src_dir:str, n_pins:int, res:int=-1) -> tuple[tf.Tensor, t
         tangle[raveled[1:],raveled[:-1]] = 1
         tangle = tf.convert_to_tensor(tangle, tf.int64)
 
+        img = preprocess_img(img)
         target = tangle_to_tftarget(tangle)
         return (img, target)
 
@@ -232,6 +226,7 @@ def get_decoder(res:int, n_pins:int=256, rotate:str='none'
             tangle = tf.roll(tangle, shift=rotate_k*n_pins//4, axis=0)
             tangle = tf.roll(tangle, shift=rotate_k*n_pins//4, axis=1)
 
+        img = preprocess_img(img)
         target = tangle_to_tftarget(tangle)
         return (img, target)
 

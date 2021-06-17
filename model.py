@@ -1,5 +1,4 @@
 from typing import Union, Any, Iterable
-import logging
 import numpy as np
 import tensorflow as tf
 
@@ -12,46 +11,27 @@ class TangledModel(tf.keras.Model):
         self.n_pins = n_pins
 
         inputs = tf.keras.layers.Input(shape=(256,256,1))
-        preprocessed = tf.keras.layers.experimental.preprocessing.Rescaling(1./127.5, offset=-1)(inputs)
-        preprocessed = tf.keras.layers.experimental.preprocessing.RandomContrast(0.2)(preprocessed)
+        # preprocessed = tf.keras.layers.experimental.preprocessing.Rescaling(1./127.5, offset=-1)(inputs)
+        # preprocessed = tf.keras.layers.experimental.preprocessing.RandomContrast(0.3)(preprocessed)
 
-        # preprocessed = tf.keras.layers.Conv2D(3, 4, strides=1, padding='SAME')(preprocessed)
-        # encoder = Encoder.mobilenet_encoder(preprocessed)
-        # encoder = tf.keras.layers.Concatenate()([encoder, preprocessed])
-        # encoder = tf.keras.layers.Conv2D(1, 4, strides=1, padding='SAME')(encoder)
-        # outputs = tf.keras.layers.Reshape((n_pins, n_pins))(encoder)
+        # x = tf.keras.layers.Flatten()(preprocessed)
+        # x = tf.keras.layers.Dense(units=32*32)(x)
+        # x = tf.keras.layers.LeakyReLU()(x)
+        # x = tf.keras.layers.Dense(units=32*32)(x)
+        # x = tf.keras.layers.LeakyReLU()(x)
+        # x = tf.keras.layers.Reshape((32,32,1))(x)
+        # y = tf.keras.layers.Conv2DTranspose(64, 4, strides=2, padding='SAME')(x)
+        # y = tf.keras.layers.Conv2DTranspose(32, 4, strides=2, padding='SAME')(y)
+        # y = tf.keras.layers.Conv2DTranspose(1, 4, strides=2, padding='SAME')(y)
+        # outputs = tf.keras.layers.Reshape((256,256))(y)
 
-        downsampled = Encoder.downsample(3, 4, apply_batchnorm=False)(preprocessed) # 256x256 -> 128x128
+        downsampled = Encoder.downsample(3, 4, apply_batchnorm=False)(inputs) # 256x256x1 -> 128x128x3
         encoder = Encoder.mobilenet_encoder(downsampled)
         encoder = tf.keras.layers.Concatenate()([encoder, downsampled])
         encoder = tf.keras.layers.Conv2DTranspose(1, 4, strides=2, padding='SAME',
             kernel_initializer=tf.random_normal_initializer(0., 0.02),
             kernel_regularizer=tf.keras.regularizers.l2())(encoder) # 128x128 -> 256x256
         outputs = tf.keras.layers.Reshape((n_pins, n_pins))(encoder)
-
-        # encoder = Encoder.u_net(preprocessed)
-        # outputs = tf.keras.layers.Reshape((n_pins, n_pins))(encoder)
-
-        # preproc = tf.keras.layers.Conv2D(3, 2, strides=1, padding='SAME', use_bias=False)(inputs)
-        # encoder = Encoder.resnet50v2_encoder(preproc)
-        # outputs = tf.keras.layers.Reshape((n_pins, n_pins))(encoder)
-
-        # ds1 = Encoder.downsample(3, 4, apply_batchnorm=False)(inputs) # 256x256 -> 128x128
-        # enc1 = Encoder.mobilenet_encoder(ds1)
-        # ds2 = Encoder.downsample(3, 4, apply_batchnorm=False)(inputs) # 256x256 -> 128x128
-        # enc2 = Encoder.mobilenet_encoder(ds2)
-        # ds3 = Encoder.downsample(3, 4, apply_batchnorm=False)(inputs) # 256x256 -> 128x128
-        # enc3 = Encoder.mobilenet_encoder(ds3)
-        # ds4 = Encoder.downsample(3, 4, apply_batchnorm=False)(inputs) # 256x256 -> 128x128
-        # enc4 = Encoder.mobilenet_encoder(ds4)
-        # encoders = tf.keras.layers.Concatenate()([enc1, ds1, enc2, ds2, enc3, ds3, enc4, ds4])
-        # encoder = tf.keras.layers.Conv2DTranspose(1, 4, strides=2, padding='SAME',
-        #     kernel_initializer=tf.random_normal_initializer(0., 0.02),
-        #     kernel_regularizer=tf.keras.regularizers.l2())(encoders) # 128x128 -> 256x256
-        # outputs = tf.keras.layers.Reshape((n_pins, n_pins))(encoder)
-
-        # encoder = tf.keras.layers.Reshape((256, 256))(encoder)
-        # outputs = FFTLayer(name='fft')(encoder)
 
         super(TangledModel, self).__init__(inputs=inputs, outputs=outputs, name=name)
 
@@ -136,7 +116,7 @@ class Encoder():
 
         result = tf.keras.Sequential()
         result.add(tf.keras.layers.Conv2DTranspose(filters, size, strides=2,
-            # kernel_regularizer=tf.keras.regularizers.l2(l2=1e-4),
+            kernel_regularizer=tf.keras.regularizers.l2(),
             kernel_initializer=initializer, use_bias=False, padding='SAME'))
 
         result.add(tf.keras.layers.BatchNormalization())
