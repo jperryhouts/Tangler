@@ -143,9 +143,9 @@ def fit(train_data:str, val_data:str, output_dir:str, model_name:str=None,
 
     checkpoint_path = f"{checkpoint_path}.{save_format}"
 
-    model = TangledModel(n_pins, model_name)
-    # down_stack = get_down_stack()
-    # model = SimpleModel(down_stack, model_name)
+    # model = TangledModel(n_pins, model_name)
+    down_stack = get_down_stack()
+    model = SimpleModel(down_stack, model_name)
 
     if resume:
         # model = tf.keras.models.load_model(checkpoint_path)
