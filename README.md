@@ -29,6 +29,8 @@ I’m going to rule out approach 3 right away, because the whole point is to do 
 
 ### Method
 
+> Note: This section is outdated, and will be replaced soon!
+
 After much experimentation, the method I've adopted is based on the principle of solving for the probability distribution of each edge being "active", and sampling from that distribution at inference time. This is similar to approach 2 above, but with important modifications.
 
 The crux of my solution comes down to the intermediate representation of that probability distribution. The naive approach is to encode the solution as an NxN matrix of edges, where N is the number of pins. Thus, a string from pin 17 to 42 would be represented as a 1 in row 17, column 42. The resulting matrix is very large and extremely sparse, and as mentioned above it loses information about the spatial symmetry in the problem.
