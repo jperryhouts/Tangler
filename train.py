@@ -4,7 +4,7 @@ import tensorflow as tf
 import glob
 
 from model import TangledModel
-from simple_model import SimpleModel, get_down_stack
+from simple_model import SimpleModel, encoder_stack
 import utils
 
 def get_compiler_args(loss_func_id:str, optimizer_id:Optional[str]=None,
@@ -144,19 +144,19 @@ def fit(train_data:str, val_data:str, output_dir:str, model_name:str=None,
     checkpoint_path = f"{checkpoint_path}.{save_format}"
 
     # model = TangledModel(n_pins, model_name)
-    down_stack = get_down_stack()
-    model = SimpleModel(down_stack, model_name)
+    encoder = encoder_stack()
+    model = SimpleModel(encoder, model_name)
 
     if resume:
         # model = tf.keras.models.load_model(checkpoint_path)
         try:
-            down_stack.trainable = False
+            encoder.trainable = False
             model.load_weights(checkpoint_path)
         except ValueError:
-            down_stack.trainable = True
+            encoder.trainable = True
             model.load_weights(checkpoint_path)
 
-    down_stack.trainable = do_fine_tuning
+    encoder.trainable = do_fine_tuning
 
     if quantization_aware:
         import tensorflow_model_optimization as tfmot

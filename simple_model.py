@@ -1,11 +1,11 @@
 from typing import Optional
 import tensorflow as tf
-import tensorflow_model_optimization as tfmot
+# import tensorflow_model_optimization as tfmot
 
 IMG_RES = 256
 N_PINS = 256
 
-def downsample(filters, size:int, apply_batchnorm:bool=True) -> tf.Module:
+def downsample(filters:int, size:int, apply_batchnorm:bool=True) -> tf.Module:
     initializer = tf.random_normal_initializer(0., 0.02)
 
     result = tf.keras.Sequential()
@@ -21,12 +21,12 @@ def downsample(filters, size:int, apply_batchnorm:bool=True) -> tf.Module:
 
     return result
 
-def upsample(filters, size:int, apply_dropout:bool=False) -> tf.Module:
+def upsample(filters:int, size:int, apply_dropout:bool=False) -> tf.Module:
     initializer = tf.random_normal_initializer(0., 0.02)
 
     result = tf.keras.Sequential()
     result.add(tf.keras.layers.Conv2DTranspose(filters, size, strides=2,
-        # kernel_regularizer=tf.keras.regularizers.l2(),
+        kernel_regularizer=tf.keras.regularizers.l2(l2=1e-4),
         kernel_initializer=initializer, use_bias=False, padding='SAME'))
 
     result.add(tf.keras.layers.BatchNormalization())
@@ -39,7 +39,7 @@ def upsample(filters, size:int, apply_dropout:bool=False) -> tf.Module:
 
     return result
 
-def get_down_stack():
+def encoder_stack():
     base_model = tf.keras.applications.MobileNetV2(input_shape=(128,128,3),
                                                     include_top=False,
                                                     weights='imagenet')
@@ -56,16 +56,17 @@ def get_down_stack():
 
     return tf.keras.Model(base_model.input, base_model_outputs, name="down_stack")
 
-def SimpleModel(down_stack:Optional[tf.keras.Model]=None, name:str="Tangler") -> tf.keras.Model:
+def SimpleModel(encoder:Optional[tf.keras.Model]=None, name:str="Tangler") -> tf.keras.Model:
     inputs = tf.keras.layers.Input(shape=(IMG_RES,IMG_RES,1), dtype=tf.float32)
-    # preprocessed = tf.keras.layers.experimental.preprocessing.Rescaling(1./127.5, offset=-1)(inputs)
-    # preprocessed = tf.keras.layers.experimental.preprocessing.RandomContrast(0.3)(preprocessed)
     downsampled = downsample(3, 4, apply_batchnorm=False)(inputs) # 256x256x1 -> 128x128x3
 
-    if down_stack is None:
-        down_stack = get_down_stack()
+    ###
+    ### Begin "auto-encoder"
+    ###
+    if encoder is None:
+        encoder = encoder_stack()
 
-    up_stack = [
+    decoder_stack = [
         upsample(512, 4),  # 4x4 -> 8x8
         upsample(512, 4),  # 8x8 -> 16x16
         upsample(256, 4),  # 16x16 -> 32x32
@@ -73,24 +74,27 @@ def SimpleModel(down_stack:Optional[tf.keras.Model]=None, name:str="Tangler") ->
     ]
 
     # Downsampling through the model
-    skips = down_stack(downsampled)
-    decoder = skips[-1]
+    skips = encoder(downsampled)
+    layers = skips[-1]
     skips = list(reversed(skips[:-1]))
 
     # Upsampling and establishing the skip connections
-    for up, skip in zip(up_stack, skips):
+    for up, skip in zip(decoder_stack, skips):
         print(type(skip), skip)
-        decoder = up(decoder)
-        decoder = tf.keras.layers.Concatenate()([decoder, skip])
+        layers = up(layers)
+        layers = tf.keras.layers.Concatenate()([layers, skip])
 
-    # This is the last layer of the model
-    encoder = upsample(64,4)(decoder) #64x64 -> 128x128
+    layers = upsample(64,4)(layers) #64x64 -> 128x128
+    ###
+    ### End "auto-encoder"
+    ###
 
-    encoder = tf.keras.layers.Concatenate()([encoder, downsampled])
-    encoder = tf.keras.layers.Conv2DTranspose(1, 4, strides=2, padding='SAME',
+    # One final upsampling / skip connection to match target shape
+    layers = tf.keras.layers.Concatenate()([layers, downsampled])
+    layers = tf.keras.layers.Conv2DTranspose(1, 4, strides=2, padding='SAME',
         kernel_initializer=tf.random_normal_initializer(0., 0.02),
         kernel_regularizer=tf.keras.regularizers.l2()
-    )(encoder) # 128x128 -> 256x256
-    outputs = tf.keras.layers.Reshape((N_PINS, N_PINS))(encoder)
+    )(layers) # 128x128 -> 256x256
+    outputs = tf.keras.layers.Reshape((N_PINS, N_PINS))(layers)
 
     return tf.keras.Model(inputs, outputs, name=name)
