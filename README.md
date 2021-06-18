@@ -17,7 +17,7 @@ I’ve identified three basic approaches to handle this problem:
 1. Match the exact pattern (e.g. pin 1, 10, 62, 76, 89, 1, ...).
     - This sort of works, but because the original algorithm is stochastic it doesn't do a very good job at generalizing. For instance, the above example would be exactly equivalent to traversing those  same nodes in the opposite direction. The original algorithm is highly sensitive to minor variations in the input, so it may very well take either route while the model has no way to know about that symmetry.
     - It isn’t good at comparing the similarity of two points, since it doesn’t know about the spatial wrap-around inherent in the problem -- pin K-1 is adjacent to pin 0 for a model with K pins. For instance, pin 1 is closer to pin 280 than it is to pin 150.
-2. Encode the target pattern as a probability density with respect to the edges traversed, rather than the nodes. e.g. the above example would be encoded such that the edge between pin 1->10 is traversed once, as is the edge between 10->62, 62->76 etc. This allows the model to match string patterns independent of their particular ordering.
+2. Encode the target pattern as a probability density with respect to the edges traversed, rather than the nodes. e.g. the above example would be encoded such that the edge between pin 1->10 is traversed once, as is the edge between 10->62, 62->76 etc. This allows the model to match string patterns independent of their particular sorting.
 3. Some sort of recurrent network, where the sequence is built up incrementally, similar to the original algorithm.
 
 I’m going to rule out approach 3 right away, because the whole point is to do the whole process in one-shot. Building a path incrementally is the starting point here, not the end goal. Approach 2 is more likely to generalize than approach 1, but it has several important drawbacks:
@@ -29,20 +29,28 @@ I’m going to rule out approach 3 right away, because the whole point is to do 
 
 ### Method
 
-> Note: This section is outdated, and will be replaced soon!
+After much experimentation, the method I've adopted is most similar to option 2 above. I represent each target pattern as a 2D NxN matrix, where N is the number of points ("pins") around the circumfrence of a circle. Each row corresponds to a pin (`i`), and each column corresponds to another pin (`j`) to which pin `i` may or may not connect. That is, if `i` and `j` appear next to one another in the original string path, then row `i`/column `j` will contain a 1, otherwise it will contain a zero. Because of the model's inherent symmetry, the target matrix is also symmetric (equal to its own transpose).
 
-After much experimentation, the method I've adopted is based on the principle of solving for the probability distribution of each edge being "active", and sampling from that distribution at inference time. This is similar to approach 2 above, but with important modifications.
+**Note:** For consistency I will refer to the string path (e.g. `{2, 105, 10, 230, ...}`) as the "raveled" representation, and the 2D matrix form described above as the "tangled" representation. Model training requires first creating raveled representations of each image in the dataset, then converting each one to a tangled representation, and training a model to predict the tangled representation based on its corresponding original image.
 
-The crux of my solution comes down to the intermediate representation of that probability distribution. The naive approach is to encode the solution as an NxN matrix of edges, where N is the number of pins. Thus, a string from pin 17 to 42 would be represented as a 1 in row 17, column 42. The resulting matrix is very large and extremely sparse, and as mentioned above it loses information about the spatial symmetry in the problem.
+My training pipeline looks something like the following:
 
-Rather than solving for a sparse NxN matrix, I instead represent the training targets as matrices where rows correspond to individual pins, (e.g. row_i corresponds to pin_i), and columns contain a collection of pins to which pin_i connects. In order to create a differentiable loss function while avoiding the angular wrap-around problem I store the pin locations in cartesian coordinates, which splits the target into a rank 3 tensor with dimensions 2 x K x L where K is the number of pins, and L is the length of each row. **The loss function can then be any cartesian norm.**
+```
+-----------      -------------      -------------
+|  Image  |  ->  |  Raveled  |  ->  |  Tangled  | --------
+-----------      -------------      -------------        |
+     |                                             -------------------------
+     |                                             |  binary crossentropy  |
+     |                                             -------------------------
+     |            -----------     ----------------       |
+     -----------> |  Model  |  -> |  Prediction  | -------
+                  -----------     ----------------
+```
 
-Inference involves running an image through the network and extracting outputs from the layer before the radial to cartesian split. It's possible to just use the output as is, drawing a line from each pin to all of its connections, but this format also facilitates generating a continuous line path. Basically, just start from some arbitrary pin (say pin 0 for example), then pop a value off the front of row 0 and use that value as the next point in the path. Hop to that new row and pop its first value, and so on. There is always the possibility of returning to a pin more times than would have happened in the original, in which case the inference function will just punt to the next index. That corresponds to a situation where "there are no more good path options from this pin, so go try its neighbor".
+Steps in the top row of the above diagram are computationally expensive, so they are calcualted once, and complete training examples are stored in tfrecord format for efficient model training. The data wrangling steps are described in detail in the [documentation](docs/data/README.md).
 
-This scheme only requires solving for the same number of output values as the actual length of the path I'm generating (O(N), where N is the number of lines in the resulting path), and is not sensitive to the order in which the lines appear in the training examples. It also preserves information about the spatial layout and inherent symmetry. I managed to construct a convolutional model with good convergence behavior.
-
-<a href="https://raw.githubusercontent.com/jperryhouts/Tangler/main/docs/architecture.png">
-<img src="https://raw.githubusercontent.com/jperryhouts/Tangler/main/docs/architecture.png" width=500 />
+<a href="docs/model_arch.png">
+<img src="docs/model_arch.png" width=500 />
 </a>
 
 ## Data
