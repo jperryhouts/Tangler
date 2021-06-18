@@ -72,7 +72,7 @@ if __name__ == "__main__":
             tf.config.set_visible_devices([], 'GPU')
 
     if args.mode == "train":
-        from train import fit
+        from .train import fit
 
         assert os.path.isdir(args.train_data)
         assert os.path.isdir(args.val_data)
@@ -95,13 +95,13 @@ if __name__ == "__main__":
             summarize=args.summarize, peek=args.peek)
 
     elif args.mode == "evaluate":
-        from train import evaluate
+        from .train import evaluate
 
         assert os.path.isdir(args.test_data)
         evaluate(args.model, args.test_data, args.loss, args.batch)
 
     elif args.mode == "demo":
-        from inference import demo
+        from .inference import demo
         if ':' in args.aspect:
             w,h = args.aspect.strip().split(':')
             aspect = float(w)/float(h)
@@ -113,7 +113,7 @@ if __name__ == "__main__":
             aspect=aspect, show_stats=args.stats)
 
     elif args.mode == "convert":
-        import convert
+        from . import convert
         if args.format == 'tflite':
             convert.model_to_tflite(args.input, args.output)
         elif args.format == 'tfjs':

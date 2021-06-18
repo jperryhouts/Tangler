@@ -2,7 +2,7 @@ from typing import Union, Any, Iterable
 import numpy as np
 import tensorflow as tf
 
-import utils
+from . import utils
 
 TensorOrIterable = Union[tf.Tensor,Iterable[tf.Tensor]]
 

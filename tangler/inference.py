@@ -8,10 +8,10 @@ import glfw
 from OpenGL.GL import *
 from OpenGL.GL.shaders import compileProgram, compileShader
 
-import utils
-from image_handling import init_image_source
-from model import TangledModel
-from simple_model import SimpleModel, encoder_stack
+from . import utils
+from .image_handling import init_image_source
+# from .model import TangledModel
+from .simple_model import SimpleModel, encoder_stack
 
 class AppState():
     def __init__(self, threshold:float=0.0, resampling:int=20, paused:bool=False):

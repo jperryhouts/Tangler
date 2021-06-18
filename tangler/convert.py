@@ -1,5 +1,5 @@
 # from model import TangledModel
-from simple_model import SimpleModel
+from .simple_model import SimpleModel
 
 def model_to_tflite(input_model_path:str, output_model_path:str) -> None:
     print(f"Converting {input_model_path} to {output_model_path}")

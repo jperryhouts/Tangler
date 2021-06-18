@@ -3,9 +3,9 @@ import datetime, os, random
 import tensorflow as tf
 import glob
 
-from model import TangledModel
-from simple_model import SimpleModel, encoder_stack
-import utils
+from . import utils
+from .model import TangledModel
+from .simple_model import SimpleModel, encoder_stack
 
 def get_compiler_args(loss_func_id:str, optimizer_id:Optional[str]=None,
         learning_rate:Optional[float]=None) -> Tuple[Callable, Optional[tf.keras.optimizers.Optimizer], list[str]]:
