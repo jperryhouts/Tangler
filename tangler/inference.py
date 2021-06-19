@@ -10,8 +10,7 @@ from OpenGL.GL.shaders import compileProgram, compileShader
 
 from . import utils
 from .image_handling import init_image_source
-# from .model import TangledModel
-from .simple_model import SimpleModel, encoder_stack
+from .model import TangledModel, encoder_stack
 
 class AppState():
     def __init__(self, threshold:float=0.0, resampling:int=20, paused:bool=False):
@@ -75,7 +74,7 @@ def demo(model_path:str, data_source:str, inputs:Optional[Iterable]=None,
     n_pins = 256
 
     encoder = encoder_stack()
-    model = SimpleModel(encoder)
+    model = TangledModel(encoder)
 
     try:
         encoder.trainable = False

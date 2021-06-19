@@ -56,7 +56,7 @@ def encoder_stack():
 
     return tf.keras.Model(base_model.input, base_model_outputs, name="down_stack")
 
-def SimpleModel(encoder:Optional[tf.keras.Model]=None, name:str="Tangler") -> tf.keras.Model:
+def TangledModel(encoder:Optional[tf.keras.Model]=None, name:str="Tangler") -> tf.keras.Model:
     inputs = tf.keras.layers.Input(shape=(IMG_RES,IMG_RES,1), dtype=tf.float32)
     downsampled = downsample(3, 4, apply_batchnorm=False)(inputs) # 256x256x1 -> 128x128x3
 

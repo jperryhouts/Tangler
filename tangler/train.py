@@ -4,8 +4,7 @@ import tensorflow as tf
 import glob
 
 from . import utils
-from .model import TangledModel
-from .simple_model import SimpleModel, encoder_stack
+from .model import TangledModel, encoder_stack
 
 def get_compiler_args(loss_func_id:str, optimizer_id:Optional[str]=None,
         learning_rate:Optional[float]=None) -> Tuple[Callable, Optional[tf.keras.optimizers.Optimizer], list[str]]:
@@ -143,9 +142,8 @@ def fit(train_data:str, val_data:str, output_dir:str, model_name:str=None,
 
     checkpoint_path = f"{checkpoint_path}.{save_format}"
 
-    # model = TangledModel(n_pins, model_name)
     encoder = encoder_stack()
-    model = SimpleModel(encoder, model_name)
+    model = TangledModel(encoder, model_name)
 
     if resume:
         # model = tf.keras.models.load_model(checkpoint_path)
