@@ -18,16 +18,22 @@ python3 -m tangler --help
 
 ## Quick start
 
-Inferences can be run in realtime on your local desktop with the pre-trained model included with this repository.
+In order to use the pre-trained model, you'll have to download it separately
 
 ```bash
-python3 -m tangler demo data/model.h5
+wget https://storage-9iudgkuqwurq6.s3-us-west-2.amazonaws.com/tangler_model.h5
 ```
 
-If you're on Linux, then the model can pipe its output to a virtual webcam device. You must first have [pyfakewebcam](https://github.com/jremmons/pyfakewebcam) installed an configured.
+To run inferences in real time, use Tangler's demo mode:
 
 ```bash
-python3 -m tangler demo data/model.h5 --webcam /dev/video1
+python3 -m tangler demo tangler_model.h5
+```
+
+If you're on Linux, the model can pipe its output to a virtual webcam device. You must first have [pyfakewebcam](https://github.com/jremmons/pyfakewebcam) installed and properly configured.
+
+```bash
+python3 -m tangler demo --webcam /dev/video1 tangler_model.h5
 ```
 
 ## Usage
@@ -61,7 +67,7 @@ python3 -m tangler demo --help
 The full command will look something like:
 
 ```bash
-python3 -m tangler --cpu demo --mirror --stats data/model.h5
+python3 -m tangler --cpu demo --mirror --stats tangler_model.h5
 ```
 
 ## Testing
