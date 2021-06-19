@@ -1,0 +1,11 @@
+glfw==2.1.0
+matplotlib==3.4.2
+numpy==1.19.5
+opencv-python-headless==4.5.2.52
+Pillow==8.2.0
+pyfakewebcam==0.1.0
+PyOpenGL==3.1.5
+pytest==6.2.4
+tensorflow==2.5.0
+tensorflow-addons==0.13.0
+tensorflowjs==3.6.0

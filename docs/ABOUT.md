@@ -47,7 +47,7 @@ My training pipeline looks something like the following:
                   -----------     ----------------
 ```
 
-Steps in the top row of the above diagram are computationally expensive, so they are calcualted once, and complete training examples are stored in tfrecord format for efficient model training. The data wrangling steps are described in detail in the [documentation](docs/data/README.md).
+Steps in the top row of the above diagram are computationally expensive, so they are calcualted once, and complete training examples are stored in tfrecord format for efficient model training. The data wrangling steps are described in detail in the [documentation](DATA.md).
 
 <a href="docs/model_arch.png">
 <img src="docs/model_arch.png" width=500 />

@@ -10,7 +10,6 @@ import numpy as np
 try:
     import matplotlib.pyplot as plt
     import matplotlib.colors as colors
-    import cmocean
     from PIL import Image
     plt.style.use('seaborn-talk')
 except Exception as e:

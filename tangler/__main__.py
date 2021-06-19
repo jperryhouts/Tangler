@@ -4,7 +4,7 @@ import os, pathlib
 from argparse import ArgumentParser
 
 if __name__ == "__main__":
-    parser = ArgumentParser('Tangler', usage='python3 tangler.py [RUNTIME_FLAGS]')
+    parser = ArgumentParser('Tangler', usage='python3 -m tangler [RUNTIME ARGUMENTS]')
 
     parser.add_argument('--debug', action='store_true', help='Enable TensorFlow debug mode')
     parser.add_argument('--cpu', action='store_true', help='Disable GPU compute')
