@@ -4,7 +4,7 @@ This project is inspired by physical [string art](https://vimeo.com/175653201), 
 
 The usual way to generate a pattern like that is with an incremental approach: start at some arbitrary pin, then add a single line at a time looking for the optimal next pin that gets your vector representation closer to the bitmap version. This works surprisingly well. I made a web app called [Raveler](https://jperryhouts.github.io/raveler/) that can convert any image into string art using that method.
 
-That algorithm takes ~200 milliseconds in native C++, and I got it to around 600 milliseconds in the browser using a C++ to wasm/javascript compiler. I think it would be really cool to do this in real time with video or webcam input where 600ms per frame would be too slow. It seems like something a neural net would be really good at, since it's basically just a weird compression algorithm.
+That algorithm takes ~600 milliseconds in native C++, and around 1 second in the web app. The app is compiled to WASM bytecode using a C++ to wasm/javascript compiler. I think it would be really cool to do this in real time with video or webcam input where 600ms per frame would be too slow. It seems like something a neural net would be really good at, since it's basically just a weird compression algorithm.
 
 The goal of this project is to train a neural network that will be able to generate similar string art representations of arbitrary images in real time. My plan is to convert a bunch of random images into line paths using the iterative approach I mentioned before, and train a neural net to generate similar patterns, using the original bitmap images as examples.
 
@@ -29,7 +29,9 @@ I’m going to rule out approach 3 right away, because the whole point is to do 
 
 ### Method
 
-After much experimentation, the method I've adopted is most similar to option 2 above. I represent each target pattern as a 2D NxN matrix, where N is the number of points ("pins") around the circumfrence of a circle. Each row corresponds to a pin (`i`), and each column corresponds to another pin (`j`) to which pin `i` may or may not connect. That is, if `i` and `j` appear next to one another in the original string path, then row `i`/column `j` will contain a 1, otherwise it will contain a zero. Because of the model's inherent symmetry, the target matrix is also symmetric (equal to its own transpose).
+After much experimentation, the method I've adopted is most similar to option 2 above. I represent each target pattern as a 2D NxN matrix, where N is the number of points ("pins") around the circumfrence of a circle. Each row corresponds to a pin (`i`), and each column corresponds to another pin (`j`) to which pin `i` may or may not connect. That is, if `i` and `j` appear next to one another in the original string path, then row `i`/column `j` will contain a 1, otherwise it will contain a zero. Because of the system's inherent symmetry, the target matrix is also symmetric (equal to its own transpose).
+
+![Example of tangled image format](example.png)
 
 **Note:** For consistency I will refer to the string path (e.g. `{2, 105, 10, 230, ...}`) as the "raveled" representation, and the 2D matrix form described above as the "tangled" representation. Model training requires first creating raveled representations of each image in the dataset, then converting each one to a tangled representation, and training a model to predict the tangled representation based on its corresponding original image.
 
@@ -62,3 +64,7 @@ I found that transfer learning from the pretrained model helps, but is most effe
 ## Data
 
 My itinial attempts at this model were all trained on [Imagenette](https://github.com/fastai/imagenette), a small (~10,000 image) subset of the Imagenet database. Once I started to see promising convergence behavior I scaled up to data from the [ImageNet object localization challenge](https://www.kaggle.com/c/imagenet-object-localization-challenge/data). The complete data wrangling steps, and links to the preprocessed data are in the [documentation](DATA.md).
+
+## Results
+
+> This document is still a work in progress. More to come...
