@@ -72,7 +72,7 @@ python3 -m tangler --cpu demo --mirror --stats tangler_model.h5
 
 ## Testing
 
-Code coverage is still pretty sparse, but there are a handful of unit tests for some of the simple data manipulation functions. They can be run with pytest.
+Test coverage is still pretty sparse, but there are a handful of unit tests for some of the simple data manipulation functions. They can be run with pytest.
 
 ```bash
 python -m pytest tangler/
