@@ -4,7 +4,6 @@
 
 The Tangler model was trained on about 1.4 million images from the popular [ImageNet object localization challenge](https://www.kaggle.com/c/imagenet-object-localization-challenge/data). The associated code requires that all images have a corresponding precomputed string path to be used as training targets, and that all images be delivered with a common aspect ratio and color profile. In particular, I chose to train the model on grayscale images with 256x256 pixel resolution, and pin sequences with 6000 line segments.
 
-
 ## Data Prep
 
 The fully preprocessed dataset can be downloaded [here](https://storage-9iudgkuqwurq6.s3-us-west-2.amazonaws.com/tangled_data_tfrecords.tar), and it can be reproduced with the following steps.

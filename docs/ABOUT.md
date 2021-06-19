@@ -35,7 +35,7 @@ After much experimentation, the method I've adopted is most similar to option 2 
 
 My training pipeline looks something like the following:
 
-```
+```text
    ----------
    |  Image |
    ----------
@@ -55,7 +55,7 @@ Steps in the top row of the above diagram are computationally expensive, so they
 
 The model itself is arranged in a U-Net architecture, based on a pre-trained MobileNetV2 model, similar to that used in the TensorFlow [image segmentation tutorial](https://www.tensorflow.org/tutorials/images/segmentation?hl=nb).
 
-<a href="model_arch.png"><img src="model_arch.png" width=500 /></a>
+![Model architecture diagram](model_arch.png)
 
 I found that transfer learning from the pretrained model helps, but is most effective if all layers are trainable. This is in contrast to the conventional wisdom about transfer learning that the pre-trained layers should be locked, at least until a final fine-tuning step.
 

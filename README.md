@@ -34,7 +34,7 @@ python3 -m tangler demo data/model.h5 --webcam /dev/video1
 
 Tangler is usually run by executing the module directly. For instance, from within the root folder of the Tangler repository, \``python3 -m tangler --help`\` prints the following help message:
 
-```
+```text
 usage: python3 -m tangler [RUNTIME ARGUMENTS]
 
 optional arguments:
@@ -54,13 +54,13 @@ Mode:
 
 Each of the operating modes has its own options, which can be shown using the corresponding mode argument, e.g.
 
-```
+```bash
 python3 -m tangler demo --help
 ```
 
 The full command will look something like:
 
-```
+```bash
 python3 -m tangler --cpu demo --mirror --stats data/model.h5
 ```
 
@@ -68,6 +68,6 @@ python3 -m tangler --cpu demo --mirror --stats data/model.h5
 
 Code coverage is still pretty sparse, but there are a handful of unit tests for some of the simple data manipulation functions. They can be run with pytest.
 
-```
+```bash
 python -m pytest tangler/
 ```
