@@ -15,7 +15,7 @@ except:
 
 def img_to_ravel(img:np.ndarray) -> np.ndarray:
     res = img.shape[0]
-    sp = Popen(['/home/jmp/bin/raveler','-r',str(res),'-f','tsv','-'], stdout=PIPE, stdin=PIPE)
+    sp = Popen(['raveler','-r',str(res),'-f','tsv','-'], stdout=PIPE, stdin=PIPE)
     img = img.astype(np.uint8)
     so = sp.communicate(input=img.tobytes())
     pins = np.loadtxt(BytesIO(so[0])).T[0]
