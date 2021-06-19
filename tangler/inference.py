@@ -9,7 +9,7 @@ from OpenGL.GL import *
 from OpenGL.GL.shaders import compileProgram, compileShader
 
 from . import utils
-from .image_handling import init_image_source
+from .img_utils import init_image_source
 from .model import TangledModel, encoder_stack
 
 class AppState():

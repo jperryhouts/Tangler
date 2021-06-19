@@ -1,7 +1,7 @@
 import os
 import numpy as np
 import pickle
-from tangler.image_handling import load_img
+from tangler.img_utils import load_img
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.relpath(__file__)), 'test_files')
 
