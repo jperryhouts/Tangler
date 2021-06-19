@@ -1,6 +1,6 @@
 # Tangler
 
-Tangler is a real-time video filter, inspired by physical [string art](https://vimeo.com/175653201). It uses a neural net architecture to create stylized representations of arbitrary input images. It can be used as a webcam filter for video chats, or convert video clips into string path renderings. There is also an in-browser live demo of the algorithm hosted [here](https://jperryhouts.github.io/Tangler/).
+Tangler is a real-time video filter, inspired by physical [string art](https://vimeo.com/175653201). It uses a neural net architecture to create stylized representations of arbitrary input images. It can be used as a webcam filter for video chats, or convert video clips into string path renderings. There is also an [in-browser live demo](https://jperryhouts.github.io/Tangler/) of the algorithm.
 
 A complete discussion of the model design and implementation can be found in [the documentation](docs/ABOUT.md). This repository contains all code necessary for training, testing, and deploying the Tangler model.
 
