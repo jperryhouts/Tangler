@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@2.0.0/dist/tf.min.js"></script>
+        <script type="text/javascript" src="model.js"></script>
+    </head>
+    <body>
+        <video width=640 height=480 autoplay="true" id="stream" style='display:none;'></video>
+        <canvas width=256 height=256 id="webcam"></canvas>
+        <canvas width=256 height=256 id="tangled"></canvas>
+        <canvas width=1024 height=1024 id="raveled" style="width:256px;height:256px"></canvas>
+    </body>
+</html>
