@@ -68,7 +68,7 @@ def preprocess_img(img:tf.Tensor) -> tf.Tensor:
     preprocessed *= tf.random.uniform(shape=[], minval=0.8, maxval=1.0)
     return preprocessed
 
-def img_to_tangle(model, image:np.ndarray) -> np.ndarray:
+def img_to_tangle(model:tf.keras.Model, image:np.ndarray) -> np.ndarray:
     image = image.reshape((1,256,256,1)).astype(np.float32)
     image = (image-127.5)/127.5
     predicted = model.predict(image)

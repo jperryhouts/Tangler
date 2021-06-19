@@ -66,8 +66,8 @@ python3 -m tangler --cpu demo --mirror --stats data/model.h5
 
 ## Testing
 
-Unit tests are written with pytest, and can be run the usual way:
+Code coverage is still pretty sparse, but there are a handful of unit tests for some of the simple data manipulation functions. They can be run with pytest.
 
 ```
-python -m pytest .
+python -m pytest tangler/
 ```
