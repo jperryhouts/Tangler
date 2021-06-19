@@ -36,18 +36,22 @@ After much experimentation, the method I've adopted is most similar to option 2 
 My training pipeline looks something like the following:
 
 ```
------------      -------------      -------------
-|  Image  |  ->  |  Raveled  |  ->  |  Tangled  | --------
------------      -------------      -------------        |
-     |                                             -------------------------
-     |                                             |  binary crossentropy  |
-     |                                             -------------------------
-     |            -----------     ----------------       |
-     -----------> |  Model  |  -> |  Prediction  | -------
-                  -----------     ----------------
+   ----------
+   |  Image |
+   ----------
+       |
+----------------      -------------      -------------
+|  Normalized  |  ->  |  Raveled  |  ->  |  Tangled  | --------
+----------------      -------------      -------------        |
+       |                                             -------------------------
+       |                                             |  binary crossentropy  |
+       |                                             -------------------------
+       |              -----------     ----------------       |
+       -------------> |  Model  |  -> |  Prediction  | -------
+                      -----------     ----------------
 ```
 
-Steps in the top row of the above diagram are computationally expensive, so they are calcualted once, and complete training examples are stored in tfrecord format for efficient model training. The data wrangling steps are described in detail in the [documentation](DATA.md).
+Steps in the top row of the above diagram are computationally expensive, so they are calcualted once, and complete training examples are stored in tfrecord format for efficient model training.
 
 The model itself is arranged in a U-Net architecture, based on a pre-trained MobileNetV2 model, similar to that used in the TensorFlow [image segmentation tutorial](https://www.tensorflow.org/tutorials/images/segmentation?hl=nb).
 
@@ -57,24 +61,4 @@ I found that transfer learning from the pretrained model helps, but is most effe
 
 ## Data
 
-I am currently using images from [Imagenette](https://github.com/fastai/imagenette), a subset of the Imagenet database. The labels are ignored, and targets are generated using the [Raveler](https://github.com/jperryhouts/raveler/) CLI app. Targets are then converted into the format described in the methods section above. For efficiency, a scaled and cropped grayscale version of each image is saved alongside its calculated target in a set of `.tfrecord` files.
-
-All the preprocessing steps can be reproduced by installing [Raveler](https://github.com/jperryhouts/raveler/) and running Tangler in `prep` mode with the following options:
-
-```
-python3 tangler.py prep -r 150 -n 10 -J 4 -N 5000 -k 256 -c 60 imagenette/train tfrecords/train
-python3 tangler.py prep -r 150 -n 10 -J 4 -N 5000 -k 256 -c 60 imagenette/val tfrecords/val
-```
-
-Preprocessed training data can be downloaded from the following urls:
-
-[tangler_training_data.tar.gz](https://storage-9iudgkuqwurq6.s3-us-west-2.amazonaws.com/tangler_training_data_imagenette/tangler_training_data.tar.gz)  
-[tangler_validation_data.tar.gz](https://storage-9iudgkuqwurq6.s3-us-west-2.amazonaws.com/tangler_training_data_imagenette/tangler_validation_data.tar.gz)
-
-## (Preliminary) Results
-
-This is still a prototype, and therefore the results are still pretty sketchy, but it's clearly moving in the right direction. The model was still converging when I stopped it training, so presumably it could have achieved near perfect accuracy if given enough training time. Note that for this example I was only calculating model loss on the training set, so these results may be over fit to that data.
-
-The latest model can be downloaded [here](https://storage-9iudgkuqwurq6.s3-us-west-2.amazonaws.com/tangler_models/tangler_model_20210522-180656.tar.gz).
-
-![example results](docs/examples.png)
+My itinial attempts at this model were all trained on [Imagenette](https://github.com/fastai/imagenette), a small (~10,000 image) subset of the Imagenet database. Once I started to see promising convergence behavior I scaled up to data from the [ImageNet object localization challenge](https://www.kaggle.com/c/imagenet-object-localization-challenge/data). The complete data wrangling steps, and links to the preprocessed data are in the [documentation](DATA.md).
