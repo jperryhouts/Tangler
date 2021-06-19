@@ -3,7 +3,7 @@
 import os, pathlib
 from argparse import ArgumentParser
 
-if __name__ == "__main__":
+def run():
     parser = ArgumentParser('Tangler', usage='python3 -m tangler [RUNTIME ARGUMENTS]')
 
     parser.add_argument('--debug', action='store_true', help='Enable TensorFlow debug mode')
@@ -120,3 +120,6 @@ if __name__ == "__main__":
             convert.model_to_tfjs(args.input, args.output)
         else:
             raise Exception("Input format not recognized:",args.format)
+
+if __name__ == '__main__':
+    run()
