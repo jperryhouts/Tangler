@@ -49,9 +49,11 @@ My training pipeline looks something like the following:
 
 Steps in the top row of the above diagram are computationally expensive, so they are calcualted once, and complete training examples are stored in tfrecord format for efficient model training. The data wrangling steps are described in detail in the [documentation](DATA.md).
 
-<a href="docs/model_arch.png">
-<img src="docs/model_arch.png" width=500 />
-</a>
+The model itself is arranged in a U-Net architecture, based on a pre-trained MobileNetV2 model, similar to that used in the TensorFlow [image segmentation tutorial](https://www.tensorflow.org/tutorials/images/segmentation?hl=nb).
+
+<a href="model_arch.png"><img src="model_arch.png" width=500 /></a>
+
+I found that transfer learning from the pretrained model helps, but is most effective if all layers are trainable. This is in contrast to the conventional wisdom about transfer learning that the pre-trained layers should be locked, at least until a final fine-tuning step.
 
 ## Data
 
