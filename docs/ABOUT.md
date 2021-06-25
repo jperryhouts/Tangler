@@ -77,8 +77,7 @@ My itinial attempts at this model were all trained on [Imagenette](https://githu
 
 ## Results
 
-The animation below demonstrates the algorithm's effictiveness against some stock video footage. The algorithm is able to convert about 15
--------------------------ther case.
+The animation below demonstrates the algorithm's effictiveness against some stock video footage. The algorithm is able to convert about 15 frames per second. The video below is running at 30 frames per second (approximately equivalent to dropping every other frame).
 
 https://user-images.githubusercontent.com/6118266/123179136-930b0a80-d43d-11eb-972a-e515f7eef12d.mp4
 
