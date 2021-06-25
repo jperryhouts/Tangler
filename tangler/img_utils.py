@@ -111,6 +111,18 @@ class ImageSource():
     def rgb2gray(img):
         return cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
 
+    @staticmethod
+    def gray2rgb(img):
+        return cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
+
+    @staticmethod
+    def stretch_contrast(img):
+        img = img.astype(np.float64)
+        img = (img - img.mean())/(3*img.std()+0.01) + 0.5
+        np.clip(img, 0, 1, img)
+        img = (img-img.min())/img.ptp()
+        return (255*img).astype(np.uint8)
+
 def init_image_source(source:str, inputs:Iterable=[0], mirror=False, cycle=False) -> ImageSource:
     if source == "files":
         sources = []

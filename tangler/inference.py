@@ -60,9 +60,11 @@ class AppState():
         plt.colorbar(im2, ax=ax[1])
         plt.show()
 
+RAVELED = False
+
 def demo(model_path:str, data_source:str, inputs:Optional[Iterable]=None,
         mirror:bool=False, cycle:bool=True, delay:int=0, path_len:int=35000,
-        threshold:float=-2.5, res:int=512, webcam:Optional[str]=None,
+        threshold:float=0.85, res:int=512, webcam:Optional[str]=None,
         aspect:float=1.0, show_stats:bool=False) -> None:
 
     res_x, res_y = int(aspect*res), res
@@ -104,7 +106,9 @@ def demo(model_path:str, data_source:str, inputs:Optional[Iterable]=None,
     }}
     '''
 
-    thread_wt = 75e-6
+    thread_wt = 125e-6 # 75e-6
+    if RAVELED:
+        thread_wt *= 2
     fragment_src = f'''
     void main() {{
         gl_FragColor = vec4(0.0, 0.0, 0.0, {res*thread_wt});
@@ -161,18 +165,24 @@ def demo(model_path:str, data_source:str, inputs:Optional[Iterable]=None,
 
         glClear(GL_COLOR_BUFFER_BIT)
 
+        _model_input_res = 256
+        preprocessed = image_source.resize(src_cropped_rgb, _model_input_res)
+        preprocessed = image_source.rgb2gray(preprocessed)
+        preprocessed = image_source.stretch_contrast(preprocessed)
+
         if not app_state.paused:
-            _model_input_res = 256
-            preprocessed = image_source.resize(src_cropped_rgb, _model_input_res)
-            preprocessed = image_source.rgb2gray(preprocessed)
-            predicted = utils.img_to_tangle(model, preprocessed)
+            if RAVELED:
+                pins[:6001] = utils.img_to_ravel(preprocessed)
+                #if dest is not None:
+                #    np.savetxt(f"{dest}/{frame_count}.raveled", pins[:6001])
+            else:
+                predicted = utils.img_to_tangle(model, preprocessed)
 
-            timer1[1:] = timer1[:-1]
-            timer1[0] = time.perf_counter()
+                timer1[1:] = timer1[:-1]
+                timer1[0] = time.perf_counter()
 
-            tangle = utils.resample(predicted, app_state.threshold, app_state.resampling)
-            pins[:] = utils.untangle(tangle, path_len, 0.5, np.float32)
-            # pins[:6001] = utils.img_to_ravel(preprocessed)
+                tangle = utils.resample(predicted, app_state.threshold, app_state.resampling)
+                pins[:] = utils.untangle(tangle, path_len, 0.5, np.float32)
 
             timer2[1:] = timer2[:-1]
             timer2[0] = time.perf_counter()
@@ -190,9 +200,11 @@ def demo(model_path:str, data_source:str, inputs:Optional[Iterable]=None,
 
         if webcam is not None:
             if app_state.raw_feed:
+                src_img = src_cropped_rgb
+                # src_img = image_source.gray2rgb(preprocessed)
                 frame = np.zeros((res_y, res_x, 3), dtype=np.uint8)
                 c1 = (res_x-res)//2
-                frame[:,c1:c1+res,:] = image_source.resize(src_cropped_rgb, res)
+                frame[:,c1:c1+res,:] = image_source.resize(src_img, res)
             else:
                 pix_buffer = glReadPixels(0, 0, res_x, res_y, GL_RGB, GL_UNSIGNED_BYTE)
                 frame = np.frombuffer(pix_buffer, dtype=np.uint8, count=res_x*res_y*3)

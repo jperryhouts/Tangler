@@ -49,7 +49,7 @@ def run():
     demo_parser.add_argument('--stats', action='store_true', help='Periodically report performance stats including FPS and inference times. Default: false')
     demo_parser.add_argument('--delay', '-d', default=0, type=int, help='Time delay in milliseconds between frames. Default: 0')
     demo_parser.add_argument('--path-buffer', default=35000, type=int, help='Size of memory buffer to use for string path. Default: 35000')
-    demo_parser.add_argument('--threshold', default=-2.5, type=float, help='Value to consider a positive prediction. Default: 0')
+    demo_parser.add_argument('--threshold', default=0.85, type=float, help='Value to consider a positive prediction. Default: 0.85')
     demo_parser.add_argument('--resolution', '-r', default=512, type=int, help='Size of rendered output. Default: 512')
     demo_parser.add_argument('--aspect', '-a', default='1.0', help='Aspect ratio of output. Can be a number or aspect ratio in the format "w:h"')
     demo_parser.add_argument('--webcam', help='Output as fake webcam device using v4l2loopback. The path of a v4l2loopback device must be specified as an argument (e.g. /dev/video1)')
